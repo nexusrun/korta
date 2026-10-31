@@ -18,7 +18,7 @@ import (
 	"time"
 )
 
-// Version is set at build time with -ldflags "-X .../internal/cli.Version=v1.2.3".
+// Version is set at build time with -ldflags "-X github.com/nexusrun/korta/cli.Version=v1.2.3".
 var Version = ""
 
 type config struct {
