@@ -1,0 +1,7 @@
+/data/
+test
+.env
+/bin/
+testdata/livehost/authorized_keys
+AGENTS.md
+CLAUDE.md

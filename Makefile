@@ -1,0 +1,9 @@
+.PHONY: build check test
+build:
+	go build -trimpath -o bin/korta ./cmd/korta
+check:
+	test -z "$$(gofmt -l .)"
+	go vet ./...
+	go test -race ./...
+test:
+	go test ./...
