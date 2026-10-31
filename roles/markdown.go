@@ -43,7 +43,7 @@ var sectionKinds = []struct{ kind, prefix string }{
 }
 
 var sectionTitles = map[string]string{
-	"aws-instance": "AWS instance", "group": "Groups", "user": "Users", "directory": "Directories", "packages": "Packages",
+	"aws-instance": "AWS instance", "aws-network": "AWS network", "aws-lb": "AWS load balancer", "group": "Groups", "user": "Users", "directory": "Directories", "packages": "Packages",
 	"service": "Services", "file": "Files", "sysctl": "Kernel settings", "firewall": "Firewall",
 	"patch": "Updates", "command": "Commands",
 }
@@ -88,9 +88,16 @@ func ParseMarkdown(src string) ([]Step, error) {
 	if cloud != nil {
 		steps = append(steps, *cloud)
 	}
+	network, err := parseAWSNetwork(items)
+	if err != nil {
+		return nil, err
+	}
+	if network != nil {
+		return []Step{*network}, nil
+	}
 	sysctl := -1
 	for _, it := range items {
-		if it.kind == "aws-instance" {
+		if it.kind == "aws-instance" || it.kind == "aws-lb" {
 			continue
 		}
 		parsed, err := parseItem(it)
@@ -123,7 +130,7 @@ func scanMarkdown(src string) ([]mdItem, error) {
 	lines := strings.Split(strings.ReplaceAll(src, "\r\n", "\n"), "\n")
 	items := []mdItem{}
 	kind, title, titleLine := "", "", 0
-	awsSection := false
+	awsSection, lbSection := false, false
 	open := -1 // index of the last item in this section that may take a code block
 	for i := 0; i < len(lines); i++ {
 		raw := strings.TrimRight(lines[i], " \t")
@@ -167,13 +174,19 @@ func scanMarkdown(src string) ([]mdItem, error) {
 			continue
 		}
 		if m := headingRe.FindStringSubmatch(trimmed); m != nil && m[2] != "" && !strings.HasPrefix(m[2], "!") {
-			if kind == "aws-instance" && open < 0 {
-				return nil, fmt.Errorf("line %d: AWS instance needs field: value bullets", titleLine)
+			if (kind == "aws-instance" || kind == "aws-network" || kind == "aws-lb") && open < 0 {
+				return nil, fmt.Errorf("line %d: %s needs field: value bullets", titleLine, sectionTitles[kind])
 			}
 			kind, title, titleLine, open = headingKind(m[2]), m[2], n, -1
-			if kind == "aws-instance" {
+			if kind == "aws-lb" {
+				if lbSection {
+					return nil, fmt.Errorf("line %d: a role can have only one AWS load balancer section", n)
+				}
+				lbSection = true
+			}
+			if kind == "aws-instance" || kind == "aws-network" {
 				if awsSection {
-					return nil, fmt.Errorf("line %d: a role can have only one AWS instance section", n)
+					return nil, fmt.Errorf("line %d: a role can have only one AWS section: an instance or a network", n)
 				}
 				awsSection = true
 			}
@@ -200,15 +213,23 @@ func scanMarkdown(src string) ([]mdItem, error) {
 		items = append(items, mdItem{kind: kind, title: title, line: n, indent: indent, text: text})
 		open = len(items) - 1
 	}
-	if kind == "aws-instance" && open < 0 {
-		return nil, fmt.Errorf("line %d: AWS instance needs field: value bullets", titleLine)
+	if (kind == "aws-instance" || kind == "aws-network" || kind == "aws-lb") && open < 0 {
+		return nil, fmt.Errorf("line %d: %s needs field: value bullets", titleLine, sectionTitles[kind])
 	}
 	return items, nil
 }
 
 func headingKind(heading string) string {
 	best, at := "", -1
-	for i, w := range strings.Fields(strings.ToLower(heading)) {
+	words := strings.Fields(strings.ToLower(heading))
+	// "AWS network" and "AWS VPC" are networks; other AWS headings instances.
+	if len(words) > 1 && strings.HasPrefix(words[0], "aws") && (strings.HasPrefix(words[1], "network") || words[1] == "vpc") {
+		return "aws-network"
+	}
+	if len(words) > 1 && strings.HasPrefix(words[0], "aws") && (words[1] == "load" || words[1] == "alb" || words[1] == "lb") {
+		return "aws-lb"
+	}
+	for i, w := range words {
 		w = strings.Trim(w, "`*_:,.()")
 		for _, k := range sectionKinds {
 			if strings.HasPrefix(w, k.prefix) && (at < 0 || i < at) {
@@ -700,6 +721,10 @@ func ToMarkdown(steps []Step) string {
 			prev = s.Type
 		}
 		switch s.Type {
+		case "aws-network":
+			if s.Network != nil {
+				b.WriteString(s.Network.markdown())
+			}
 		case "aws-instance":
 			a := s.AWS
 			if a != nil {
@@ -707,11 +732,14 @@ func ToMarkdown(steps []Step) string {
 				if a.Count > 1 {
 					count = strconv.Itoa(a.Count)
 				}
-				for _, f := range [][2]string{{"name", a.Name}, {"count", count}, {"os", a.OS}, {"size", a.InstanceType}, {"network", a.Network}, {"region", a.Region}, {"address", a.Address},
+				for _, f := range [][2]string{{"name", a.Name}, {"count", count}, {"os", a.OS}, {"size", a.InstanceType}, {"network", a.Network}, {"region", a.Region}, {"address", a.Address}, {"static ip", map[bool]string{true: "yes"}[a.StaticIP]},
 					{"image", a.Image}, {"subnet", a.Subnet}, {"security-groups", strings.Join(a.SecurityGroups, ", ")}, {"key-pair", a.KeyPair}, {"ssh-key", a.SSHKey}, {"user", a.User}} {
 					if f[1] != "" {
 						fmt.Fprintf(&b, "- %s: %s\n", f[0], f[1])
 					}
+				}
+				if a.LoadBalancer != nil {
+					b.WriteString("\n# AWS load balancer\n\n" + a.LoadBalancer.markdown())
 				}
 			}
 		case "group":

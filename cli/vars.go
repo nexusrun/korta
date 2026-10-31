@@ -40,11 +40,11 @@ func (c *client) loadRole(path string) (*localRole, error) {
 	if err != nil {
 		return nil, err
 	}
-	aws, err := roles.ParseAWS(string(b))
+	aws, err := roles.ProvisionsAWS(string(b))
 	if err != nil {
 		return nil, err
 	}
-	if aws != nil {
+	if aws {
 		return nil, fmt.Errorf("AWS provisioning requires a Korta Enterprise manager; use korta roles create --file ROLE.md --name NAME, then roles plan and roles apply --approve")
 	}
 	name := c.opts.values["name"]

@@ -82,11 +82,11 @@ func (c *client) rolePayload(b []byte, explicitMarkdown bool, dir string) ([]byt
 		obj["rollout"] = rollout
 	}
 	if markdown && o.args[1] == "create" && obj["targets"] == nil {
-		aws, err := roles.ParseAWS(string(b))
+		aws, err := roles.ProvisionsAWS(string(b))
 		if err != nil {
 			return nil, err
 		}
-		if aws == nil {
+		if !aws {
 			return nil, fmt.Errorf("choose role targets with --instance INSTANCE_ID or --label KEY=VALUE")
 		}
 	}

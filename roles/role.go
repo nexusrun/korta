@@ -43,9 +43,10 @@ type Rollout struct {
 
 // Step is one typed action. Only the fields of its Type are used.
 type Step struct {
-	AWS  *AWSInstance `json:"aws,omitempty"`
-	Type string       `json:"type"` // packages, patch, group, user, directory, file, service, sysctl, firewall, command
-	Name string       `json:"name,omitempty"`
+	AWS     *AWSInstance `json:"aws,omitempty"`
+	Network *AWSNetwork  `json:"network,omitempty"`
+	Type    string       `json:"type"` // packages, patch, group, user, directory, file, service, sysctl, firewall, command
+	Name    string       `json:"name,omitempty"`
 
 	// packages
 	State    string   `json:"state,omitempty"` // packages: present, absent, latest; file/user: present, absent; service: started, stopped; firewall: open, closed
@@ -147,6 +148,9 @@ func (r *Role) Compile(vars map[string]string) error {
 		if _, err := ParseAWS(r.Markdown); err != nil {
 			return err
 		}
+		if _, err := ParseAWSNetwork(r.Markdown); err != nil {
+			return err
+		}
 		size := len(r.Markdown)
 		for name, content := range r.Files {
 			if err := checkSource(name); err != nil {
@@ -181,7 +185,10 @@ func (r *Role) Compile(vars map[string]string) error {
 	if len(r.Steps) == 0 || len(r.Steps) > maxSteps {
 		return fmt.Errorf("a role needs 1-%d steps", maxSteps)
 	}
-	if r.AWS() == nil && len(r.Targets.InstanceIDs) == 0 && len(r.Targets.Labels) == 0 {
+	if r.AWSNetwork() != nil && (len(r.Steps) != 1 || len(r.Targets.InstanceIDs) > 0 || len(r.Targets.Labels) > 0) {
+		return fmt.Errorf("a network role has only its AWS network section and no targets")
+	}
+	if r.AWS() == nil && r.AWSNetwork() == nil && len(r.Targets.InstanceIDs) == 0 && len(r.Targets.Labels) == 0 {
 		return fmt.Errorf("choose target instances or labels")
 	}
 	for k, v := range r.Targets.Labels {
@@ -196,8 +203,8 @@ func (r *Role) Compile(vars map[string]string) error {
 		return fmt.Errorf("rollout batchSize must be 1-100")
 	}
 	for i := range r.Steps {
-		if r.Steps[i].Type == "aws-instance" && i != 0 {
-			return fmt.Errorf("AWS instance must be the first step")
+		if (r.Steps[i].Type == "aws-instance" || r.Steps[i].Type == "aws-network") && i != 0 {
+			return fmt.Errorf("an AWS section must be the first step")
 		}
 		if err := r.Steps[i].normalize(); err != nil {
 			return fmt.Errorf("step %d (%s): %w", i+1, r.Steps[i].Type, err)
@@ -210,10 +217,15 @@ func (s *Step) normalize() error {
 	if len(s.Name) > 120 {
 		return fmt.Errorf("name must be at most 120 characters")
 	}
-	if s.Type != "aws-instance" && s.AWS != nil {
-		return fmt.Errorf("aws settings require an aws-instance step")
+	if s.Type != "aws-instance" && s.AWS != nil || s.Type != "aws-network" && s.Network != nil {
+		return fmt.Errorf("AWS settings require their own step type")
 	}
 	switch s.Type {
+	case "aws-network":
+		if s.Network == nil {
+			return fmt.Errorf("AWS network settings are required")
+		}
+		return s.Network.normalize()
 	case "aws-instance":
 		if s.AWS == nil {
 			return fmt.Errorf("AWS settings are required")
@@ -366,6 +378,16 @@ func (s *Step) normalize() error {
 // Risky reports why a role needs extra care on approval.
 func (r Role) Risky() []string {
 	out := []string{}
+	if n := r.AWSNetwork(); n != nil {
+		what := "creates a VPC"
+		if n.VPC != "" {
+			what = "adds Korta's subnets and routes to VPC " + n.VPC
+		}
+		if g := n.NATGateways(); g > 0 {
+			what += fmt.Sprintf(" with %d NAT gateways, billed hourly", g)
+		}
+		out = append(out, what)
+	}
 	if r.AWS() != nil {
 		n := r.AWS().Count
 		what := "a billable EC2 instance"
@@ -373,6 +395,9 @@ func (r Role) Risky() []string {
 			what = fmt.Sprintf("%d billable EC2 instances", n)
 		}
 		out = append(out, "creates "+what+"; configuration is checked after launch")
+		if r.AWS().LoadBalancer != nil {
+			out = append(out, "creates a load balancer, billed hourly")
+		}
 	}
 	for i, s := range r.Steps {
 		switch {
