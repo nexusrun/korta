@@ -20,7 +20,7 @@ for target in $targets; do
 	CGO_ENABLED=0 GOOS=$os GOARCH=$arch go build -trimpath \
 		-ldflags "-s -w -X github.com/nexusrun/korta/cli.Version=$version" \
 		-o "$dir/$exe" ./cmd/korta
-	cp README.md "$dir/"
+	cp README.md LICENSE NOTICE "$dir/"
 	if [[ $os == windows ]]; then
 		(cd dist/work && zip -qr "../$name.zip" "$name")
 	else
