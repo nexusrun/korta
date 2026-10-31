@@ -211,3 +211,17 @@ with `korta login --server URL --token-file FILE`.
 make check   # gofmt, go vet and tests
 make build   # writes bin/korta
 ```
+
+## Contributing
+
+Contributions are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) to set up,
+make a change and open a pull request; commits are signed off under the
+[Developer Certificate of Origin](https://developercertificate.org). Report
+security problems privately as described in [SECURITY.md](SECURITY.md), and
+follow the [code of conduct](CODE_OF_CONDUCT.md).
+
+## License
+
+Korta is licensed under the [Apache License, Version 2.0](LICENSE).
+Copyright 2026 The Korta Authors; see [NOTICE](NOTICE). Korta Enterprise is a
+separate, commercial product.
