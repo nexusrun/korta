@@ -31,6 +31,9 @@ type AWSInstance struct {
 	StaticIP bool `json:"staticIP,omitempty"`
 	// LoadBalancer comes from the "# AWS load balancer" section.
 	LoadBalancer *AWSLoadBalancer `json:"loadBalancer,omitempty"`
+	// DNS names from the "# AWS DNS" section point at the load balancer, or
+	// at the instances' addresses.
+	DNS []string `json:"dns,omitempty"`
 }
 
 var awsID = regexp.MustCompile(`^(ami|subnet|sg)-[0-9a-f]{8,17}$`)
@@ -178,6 +181,16 @@ func (a *AWSInstance) normalize() error {
 			return fmt.Errorf("AWS load balancer: %w", err)
 		}
 	}
+	var err error
+	if a.DNS, err = normalizeDNS(a.DNS); err != nil {
+		return fmt.Errorf("AWS DNS: %w", err)
+	}
+	if len(a.DNS) == 0 {
+		a.DNS = nil
+	}
+	if a.LoadBalancer != nil && a.LoadBalancer.Certificate == "auto" && len(a.DNS) == 0 {
+		return fmt.Errorf("certificate: auto covers the role's DNS names; add an AWS DNS section")
+	}
 	if a.StaticIP && a.Address == "private" {
 		return fmt.Errorf("static ip gives instances a public address; leave it out with address: private")
 	}
@@ -280,6 +293,9 @@ func parseAWS(items []mdItem) (*Step, error) {
 		}
 	}
 	if err := parseAWSLoadBalancer(items, a); err != nil {
+		return nil, err
+	}
+	if err := parseAWSDNS(items, a); err != nil {
 		return nil, err
 	}
 	if a == nil {

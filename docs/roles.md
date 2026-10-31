@@ -232,6 +232,14 @@ Application Load Balancer in front of the instances: `listen` (`http`, or
 80), `health check` (default `/`), `from` (default `0.0.0.0/0`) and
 `internal` (default `no`). It can be added, changed or removed later.
 
+### DNS names
+
+An `# AWS DNS` section lists names for the role, one per bullet, such as
+`- shop.example.com`. Korta puts them in the account's matching Route 53
+zone, pointing at the load balancer or the instances. With
+`certificate: auto` on the load balancer, Korta requests and validates an
+ACM certificate for these names.
+
 ### AWS networks
 
 A role with only a `# AWS network` section builds a VPC, or adopts an existing
