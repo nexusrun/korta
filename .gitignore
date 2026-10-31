@@ -5,3 +5,4 @@ test
 testdata/livehost/authorized_keys
 AGENTS.md
 CLAUDE.md
+.gitignore
