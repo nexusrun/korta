@@ -1,0 +1,37 @@
+name: Bug report
+description: Something Korta does wrong
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Security problems go to the [security policy](https://github.com/nexusrun/korta/security/policy), not here. Remove secrets, keys and internal addresses before posting.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you ran, what you expected, and what happened instead. Paste the full output.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: How to reproduce it
+      description: The smallest role and inventory that show the problem, and the command.
+      render: markdown
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: korta version
+      placeholder: korta v0.1.0 (commit 1f3521fe164f)
+    validations:
+      required: true
+  - type: input
+    id: hosts
+    attributes:
+      label: Operating systems
+      description: The machine running korta, and the hosts it configures.
+      placeholder: macOS 15 running korta; Ubuntu 24.04 hosts
+    validations:
+      required: true
