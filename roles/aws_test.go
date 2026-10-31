@@ -115,3 +115,18 @@ func TestAWSRelease(t *testing.T) {
 		}
 	}
 }
+
+func TestAWSStaticIP(t *testing.T) {
+	r := Role{Name: "web", Markdown: "# AWS instance\n- name: web\n- static ip: yes\n"}
+	if err := r.Normalize(); err != nil || !r.AWS().StaticIP {
+		t.Fatal(err)
+	}
+	if md := ToMarkdown(r.Steps); !strings.Contains(md, "- static ip: yes") {
+		t.Fatal(md)
+	}
+	for _, bad := range []string{"- static ip: maybe\n", "- static ip: yes\n- address: private\n"} {
+		if err := (&Role{Name: "web", Markdown: "# AWS instance\n- name: web\n" + bad}).Normalize(); err == nil {
+			t.Errorf("%q accepted", bad)
+		}
+	}
+}

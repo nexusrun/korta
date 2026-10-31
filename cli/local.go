@@ -39,7 +39,7 @@ func (c *client) local(ctx context.Context) error {
 	// Recognize provisioning before requiring an offline inventory.
 	if len(o.args) == 2 && o.args[0] != "inventory" {
 		if b, err := os.ReadFile(o.args[1]); err == nil {
-			if a, _ := roles.ParseAWS(string(b)); a != nil {
+			if aws, _ := roles.ProvisionsAWS(string(b)); aws {
 				return fmt.Errorf("AWS provisioning requires a Korta Enterprise manager; use korta roles create, plan and apply")
 			}
 		}

@@ -26,6 +26,11 @@ type AWSInstance struct {
 	SSHKey         string   `json:"sshKey"` // vault key ID matching KeyPair
 	User           string   `json:"user"`
 	Address        string   `json:"address"` // public or private; empty uses the network's, or public
+	// StaticIP gives each public instance an Elastic IP that survives stop
+	// and start, for DNS and allow-lists. It can be switched on or off later.
+	StaticIP bool `json:"staticIP,omitempty"`
+	// LoadBalancer comes from the "# AWS load balancer" section.
+	LoadBalancer *AWSLoadBalancer `json:"loadBalancer,omitempty"`
 }
 
 var awsID = regexp.MustCompile(`^(ami|subnet|sg)-[0-9a-f]{8,17}$`)
@@ -168,6 +173,14 @@ func (a *AWSInstance) normalize() error {
 	if a.Address != "" && a.Address != "public" && a.Address != "private" {
 		return fmt.Errorf("AWS address must be public or private")
 	}
+	if a.LoadBalancer != nil {
+		if err := a.LoadBalancer.normalize(); err != nil {
+			return fmt.Errorf("AWS load balancer: %w", err)
+		}
+	}
+	if a.StaticIP && a.Address == "private" {
+		return fmt.Errorf("static ip gives instances a public address; leave it out with address: private")
+	}
 	return nil
 }
 
@@ -235,6 +248,15 @@ func parseAWS(items []mdItem) (*Step, error) {
 			a.OS = value
 		case "network":
 			a.Network = value
+		case "static ip", "static-ip", "elastic ip":
+			switch strings.ToLower(value) {
+			case "yes", "true", "on":
+				a.StaticIP = true
+			case "no", "false", "off":
+				a.StaticIP = false
+			default:
+				return nil, it.errorf("static ip is yes or no")
+			}
 		case "region":
 			a.Region = value
 		case "image":
@@ -254,8 +276,11 @@ func parseAWS(items []mdItem) (*Step, error) {
 		case "address":
 			a.Address = value
 		default:
-			return nil, it.errorf("unknown AWS field; use name, count, os, size, network, region, address, or to override Korta's choices image, subnet, security-groups, key-pair, ssh-key and user")
+			return nil, it.errorf("unknown AWS field; use name, count, os, size, network, region, address, static ip, or to override Korta's choices image, subnet, security-groups, key-pair, ssh-key and user")
 		}
+	}
+	if err := parseAWSLoadBalancer(items, a); err != nil {
+		return nil, err
 	}
 	if a == nil {
 		return nil, nil

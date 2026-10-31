@@ -199,6 +199,7 @@ it with `# AWS instance` and put host configuration below. A name is enough:
 | `network` | the default VPC    | A network an admin defined on the manager, such as `prod` |
 | `region`  | the manager's      | AWS region, such as `eu-west-1` |
 | `address` | `public`           | `private` when the manager reaches the VPC privately |
+| `static ip` | `no`             | `yes` gives each instance an Elastic IP that survives stop and start; can be switched later |
 
 The manager picks the image and login user, spreads instances over the
 network's subnets, creates an SSH key and a security group that allows SSH from
@@ -222,3 +223,43 @@ waits for SSH and configures them. Running the role again configures them and
 launches more if `count` grew. Destroy is planned and approved like any change,
 then terminates the instances and deletes the security group and key pair.
 Offline `korta plan` and `korta apply` refuse AWS sections.
+
+### Load balancers
+
+A `# AWS load balancer` section right after `# AWS instance` puts an
+Application Load Balancer in front of the instances: `listen` (`http`, or
+`https` with an ACM `certificate`), `forward` (the instances' port, default
+80), `health check` (default `/`), `from` (default `0.0.0.0/0`) and
+`internal` (default `no`). It can be added, changed or removed later.
+
+### AWS networks
+
+A role with only a `# AWS network` section builds a VPC, or adopts an existing
+one, for instance roles to use with `network: NAME`:
+
+```markdown
+# AWS network
+- name: prod
+- region: eu-west-1
+- cidr: 10.20.0.0/16
+- zones: 3
+- nat: per-zone
+```
+
+| Field             | Default        | Meaning |
+| ----------------- | -------------- | ------- |
+| `name`            | required       | What instance roles name with `network:` |
+| `cidr`            | `10.0.0.0/16`  | A new VPC's range, /16 to /24 |
+| `vpc`             | none           | Adopt this existing VPC instead of creating one |
+| `zones`           | `2`            | Availability zones, 1 to 6; can grow later |
+| `public subnets`  | carved         | One range per zone, existing subnet IDs (adopted VPCs only), or `none` |
+| `private subnets` | carved         | The same for private subnets |
+| `nat`             | `one`          | NAT gateways for private subnets: `one`, `per-zone` or `none` |
+| `region`, `account` | the default  | Where the network goes |
+| `ssh from`        | the manager    | Networks allowed to SSH to the instances |
+
+Without listed ranges, public subnets take the lower half of the VPC range and
+private subnets the upper half, a sixteenth each. In an adopted VPC, Korta
+only adds its own subnets, gateways and routes, never changes what was there,
+and Destroy removes only what it created. Instances with `address: private`
+go to the private subnets, others to the public ones.
