@@ -43,7 +43,7 @@ var sectionKinds = []struct{ kind, prefix string }{
 }
 
 var sectionTitles = map[string]string{
-	"aws-instance": "AWS instance", "aws-network": "AWS network", "aws-lb": "AWS load balancer", "group": "Groups", "user": "Users", "directory": "Directories", "packages": "Packages",
+	"aws-instance": "AWS instance", "aws-network": "AWS network", "aws-lb": "AWS load balancer", "aws-dns": "AWS DNS", "group": "Groups", "user": "Users", "directory": "Directories", "packages": "Packages",
 	"service": "Services", "file": "Files", "sysctl": "Kernel settings", "firewall": "Firewall",
 	"patch": "Updates", "command": "Commands",
 }
@@ -97,7 +97,7 @@ func ParseMarkdown(src string) ([]Step, error) {
 	}
 	sysctl := -1
 	for _, it := range items {
-		if it.kind == "aws-instance" || it.kind == "aws-lb" {
+		if it.kind == "aws-instance" || it.kind == "aws-lb" || it.kind == "aws-dns" {
 			continue
 		}
 		parsed, err := parseItem(it)
@@ -130,7 +130,7 @@ func scanMarkdown(src string) ([]mdItem, error) {
 	lines := strings.Split(strings.ReplaceAll(src, "\r\n", "\n"), "\n")
 	items := []mdItem{}
 	kind, title, titleLine := "", "", 0
-	awsSection, lbSection := false, false
+	awsSection, seenSection := false, map[string]bool{}
 	open := -1 // index of the last item in this section that may take a code block
 	for i := 0; i < len(lines); i++ {
 		raw := strings.TrimRight(lines[i], " \t")
@@ -178,11 +178,11 @@ func scanMarkdown(src string) ([]mdItem, error) {
 				return nil, fmt.Errorf("line %d: %s needs field: value bullets", titleLine, sectionTitles[kind])
 			}
 			kind, title, titleLine, open = headingKind(m[2]), m[2], n, -1
-			if kind == "aws-lb" {
-				if lbSection {
-					return nil, fmt.Errorf("line %d: a role can have only one AWS load balancer section", n)
+			if kind == "aws-lb" || kind == "aws-dns" {
+				if seenSection[kind] {
+					return nil, fmt.Errorf("line %d: a role can have only one %s section", n, sectionTitles[kind])
 				}
-				lbSection = true
+				seenSection[kind] = true
 			}
 			if kind == "aws-instance" || kind == "aws-network" {
 				if awsSection {
@@ -228,6 +228,9 @@ func headingKind(heading string) string {
 	}
 	if len(words) > 1 && strings.HasPrefix(words[0], "aws") && (words[1] == "load" || words[1] == "alb" || words[1] == "lb") {
 		return "aws-lb"
+	}
+	if len(words) > 1 && strings.HasPrefix(words[0], "aws") && (words[1] == "dns" || strings.HasPrefix(words[1], "domain") || words[1] == "route53") {
+		return "aws-dns"
 	}
 	for i, w := range words {
 		w = strings.Trim(w, "`*_:,.()")
@@ -740,6 +743,9 @@ func ToMarkdown(steps []Step) string {
 				}
 				if a.LoadBalancer != nil {
 					b.WriteString("\n# AWS load balancer\n\n" + a.LoadBalancer.markdown())
+				}
+				if len(a.DNS) > 0 {
+					b.WriteString("\n# AWS DNS\n\n- " + strings.Join(a.DNS, "\n- ") + "\n")
 				}
 			}
 		case "group":

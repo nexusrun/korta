@@ -14,7 +14,7 @@ import (
 // or removed after the instances exist.
 type AWSLoadBalancer struct {
 	Listen      string   `json:"listen"`                // http or https
-	Certificate string   `json:"certificate,omitempty"` // ACM certificate ARN, for https
+	Certificate string   `json:"certificate,omitempty"` // ACM certificate ARN, or "auto", for https
 	Forward     int      `json:"forward"`               // the instances' port
 	HealthCheck string   `json:"healthCheck"`           // path answered with 200-399
 	From        []string `json:"from"`                  // networks that may reach it
@@ -36,8 +36,8 @@ func (lb *AWSLoadBalancer) normalize() error {
 	switch {
 	case lb.Listen != "http" && lb.Listen != "https":
 		return fmt.Errorf("load balancer listen is http or https")
-	case lb.Listen == "https" && !certARN.MatchString(lb.Certificate):
-		return fmt.Errorf("https needs certificate: the ARN of an ACM certificate in the instances' region, such as arn:aws:acm:us-east-1:123456789012:certificate/…")
+	case lb.Listen == "https" && lb.Certificate != "auto" && !certARN.MatchString(lb.Certificate):
+		return fmt.Errorf("https needs certificate: auto (Korta requests one for the role's DNS names), or the ARN of an ACM certificate in the instances' region")
 	case lb.Listen == "http" && lb.Certificate != "":
 		return fmt.Errorf("a certificate needs listen: https")
 	}
@@ -82,7 +82,7 @@ func parseAWSLoadBalancer(items []mdItem, a *AWSInstance) error {
 	configured := false // host configuration started
 	for _, it := range items {
 		switch it.kind {
-		case "aws-instance", "vars":
+		case "aws-instance", "aws-dns", "vars":
 			continue
 		case "aws-lb":
 		default:
