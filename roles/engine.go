@@ -197,6 +197,14 @@ func StepName(s Step) string {
 		return s.Name
 	}
 	switch s.Type {
+	case "ntp":
+		return "network time synchronization"
+	case "dns":
+		return "DNS nameservers " + strings.Join(s.Nameservers, ", ")
+	case "hostname":
+		return "hostname " + s.Hostname
+	case "timezone":
+		return "timezone " + s.Timezone
 	case "packages":
 		return fmt.Sprintf("packages %s %v", s.State, s.Packages)
 	case "patch":
