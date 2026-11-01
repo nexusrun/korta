@@ -327,3 +327,27 @@ Korta manages one file per job under `/etc/cron.d`, and leaves other cron files
 alone. To remove a job, use the same role and job name with `state: absent` and
 omit the schedule, user and script. Do not put credentials in scheduled
 scripts, cron files are readable by local users.
+
+### SELinux
+
+Manage SELinux on hosts where it is already enabled:
+
+```markdown
+# SELinux
+- mode enforcing
+- boolean httpd_can_network_connect on
+- port tcp 8080 http_port_t
+- fcontext /srv/web httpd_sys_content_t recursive
+```
+
+The mode is `enforcing` or `permissive`, and is applied now and in
+`/etc/selinux/config`. Boolean values are `on` or `off` and persist across
+reboots. Port types apply to a single TCP or UDP port. If a port belongs to a
+range with a different type, Korta refuses the change; adjust the range
+manually. File context paths must exist; `recursive` includes descendants.
+Korta creates or updates a local policy mapping and runs `restorecon`.
+
+Install the host's SELinux management tools, including `semanage` and
+`restorecon`, before using these steps. Korta refuses disabled SELinux: enabling
+or disabling it requires a separately planned reboot and relabeling. Review
+permissive mode carefully, since SELinux logs violations without enforcing them.

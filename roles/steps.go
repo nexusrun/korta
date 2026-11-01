@@ -53,6 +53,8 @@ func Script(role string, s Step, h Host, apply, changedBefore bool) (string, err
 	data := map[string]any{"S": s, "Apply": apply, "Changed": changedBefore, "Family": h.Family, "Role": role,
 		"OwnerPlanned": planned("user", s.Owner), "GroupPlanned": planned("group", s.Group), "UserPlanned": planned("user", s.User)}
 	switch s.Type {
+	case "selinux-fcontext":
+		data["Spec"] = selinuxFileSpec(s)
 	case "user":
 		missing := []string{}
 		for _, g := range s.Groups {

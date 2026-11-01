@@ -29,6 +29,7 @@ import (
 // in a heading decides, so "Create users" manages users.
 var sectionKinds = []struct{ kind, prefix string }{
 	{"aws-instance", "aws"},
+	{"selinux", "selinux"},
 	{"scheduled-job", "scheduled"},
 	{"dns", "dns"}, {"hostname", "hostname"}, {"timezone", "timezone"}, {"time", "time"},
 	{"group", "group"},
@@ -47,10 +48,10 @@ var sectionKinds = []struct{ kind, prefix string }{
 var sectionTitles = map[string]string{
 	"aws-instance": "AWS instance", "aws-network": "AWS network", "aws-lb": "AWS load balancer", "aws-dns": "AWS DNS", "time": "Time", "ntp": "Time", "dns": "DNS", "hostname": "Hostname", "timezone": "Timezone", "group": "Groups", "user": "Users", "directory": "Directories", "packages": "Packages",
 	"service": "Services", "file": "Files", "sysctl": "Kernel settings", "firewall": "Firewall",
-	"patch": "Updates", "command": "Commands", "scheduled-job": "Scheduled jobs",
+	"selinux-mode": "SELinux", "selinux-boolean": "SELinux", "selinux-port": "SELinux", "selinux-fcontext": "SELinux", "patch": "Updates", "command": "Commands", "scheduled-job": "Scheduled jobs",
 }
 
-const sectionHelp = "start its heading with Hostname, Time, DNS, Variables, Users, Groups, Directories, Files, Packages, Services, Kernel settings, Firewall, Updates or Commands"
+const sectionHelp = "start its heading with SELinux, Hostname, Time, DNS, Variables, Users, Groups, Directories, Files, Packages, Services, Kernel settings, Firewall, Updates or Commands"
 
 var (
 	headingRe = regexp.MustCompile(`^(#{1,6})\s*(.*?)\s*#*$`)
@@ -259,6 +260,8 @@ func parseItem(it mdItem) ([]Step, error) {
 	var steps []Step
 	var err error
 	switch it.kind {
+	case "selinux":
+		steps, err = parseSELinux(it)
 	case "time":
 		if len(it.extra) > 0 || it.code != nil {
 			return nil, it.errorf("write timezone or ntp on one bullet")
@@ -792,6 +795,22 @@ func ToMarkdown(steps []Step) string {
 					b.WriteString("\n# AWS DNS\n\n- " + strings.Join(a.DNS, "\n- ") + "\n")
 				}
 			}
+		case "selinux-mode":
+			fmt.Fprintf(&b, "- mode %s\n", s.SELinuxMode)
+		case "selinux-boolean":
+			value := "off"
+			if s.Enabled != nil && *s.Enabled {
+				value = "on"
+			}
+			fmt.Fprintf(&b, "- boolean %s %s\n", s.SELinuxBoolean, value)
+		case "selinux-port":
+			fmt.Fprintf(&b, "- port %s %d %s\n", s.Protocol, s.Port, s.SELinuxType)
+		case "selinux-fcontext":
+			fmt.Fprintf(&b, "- fcontext %s %s", s.Path, s.SELinuxType)
+			if s.Recursive {
+				b.WriteString(" recursive")
+			}
+			b.WriteByte('\n')
 		case "ntp":
 			if s.NTP != nil {
 				state := "disabled"
