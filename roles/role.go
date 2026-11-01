@@ -48,6 +48,12 @@ type Step struct {
 	Type    string       `json:"type"` // packages, patch, group, user, directory, file, service, sysctl, firewall, command
 	Name    string       `json:"name,omitempty"`
 
+	// SELinux
+	SELinuxMode    string `json:"selinuxMode,omitempty"`
+	SELinuxBoolean string `json:"selinuxBoolean,omitempty"`
+	SELinuxType    string `json:"selinuxType,omitempty"`
+	Recursive      bool   `json:"recursive,omitempty"`
+
 	// scheduled jobs
 	Job      string `json:"job,omitempty"`
 	Schedule string `json:"schedule,omitempty"`
@@ -110,18 +116,20 @@ type Step struct {
 }
 
 var (
-	hostnameLabel   = regexp.MustCompile(`^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?$`)
-	timezoneName    = regexp.MustCompile(`^(UTC|[A-Za-z0-9_+.-]+(/[A-Za-z0-9_+.-]+)+)$`)
-	roleNamePattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
-	packagePattern  = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9.+_:-]{0,127}$`)
-	servicePattern  = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9@._-]{0,127}$`)
-	pathPattern     = regexp.MustCompile(`^/[A-Za-z0-9._/@+-]{1,250}$`)
-	accountPattern  = regexp.MustCompile(`^[a-z_][a-z0-9_-]{0,31}$`)
-	modePattern     = regexp.MustCompile(`^0?[0-7]{3,4}$`)
-	sysctlKey       = regexp.MustCompile(`^[a-z0-9_.-]{1,128}$`)
-	sysctlValue     = regexp.MustCompile(`^[A-Za-z0-9 _.,:/-]{1,200}$`)
-	labelPattern    = regexp.MustCompile(`^[A-Za-z0-9._/-]{1,63}$`)
-	protectedPaths  = []string{"/proc", "/sys", "/dev", "/run", "/boot"}
+	selinuxIdentifier = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]{0,127}$`)
+	selinuxTypeName   = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]{0,125}_t$`)
+	hostnameLabel     = regexp.MustCompile(`^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?$`)
+	timezoneName      = regexp.MustCompile(`^(UTC|[A-Za-z0-9_+.-]+(/[A-Za-z0-9_+.-]+)+)$`)
+	roleNamePattern   = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
+	packagePattern    = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9.+_:-]{0,127}$`)
+	servicePattern    = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9@._-]{0,127}$`)
+	pathPattern       = regexp.MustCompile(`^/[A-Za-z0-9._/@+-]{1,250}$`)
+	accountPattern    = regexp.MustCompile(`^[a-z_][a-z0-9_-]{0,31}$`)
+	modePattern       = regexp.MustCompile(`^0?[0-7]{3,4}$`)
+	sysctlKey         = regexp.MustCompile(`^[a-z0-9_.-]{1,128}$`)
+	sysctlValue       = regexp.MustCompile(`^[A-Za-z0-9 _.,:/-]{1,200}$`)
+	labelPattern      = regexp.MustCompile(`^[A-Za-z0-9._/-]{1,63}$`)
+	protectedPaths    = []string{"/proc", "/sys", "/dev", "/run", "/boot"}
 )
 
 const (
@@ -225,7 +233,26 @@ func (r *Role) Compile(vars map[string]string) error {
 	}
 	seenSystem := map[string]bool{}
 	seenJobs := map[string]bool{}
+	seenSELinux := map[string]bool{}
 	for i := range r.Steps {
+		s := r.Steps[i]
+		key := ""
+		switch s.Type {
+		case "selinux-mode":
+			key = s.Type
+		case "selinux-boolean":
+			key = s.Type + ":" + s.SELinuxBoolean
+		case "selinux-port":
+			key = fmt.Sprintf("%s:%s:%d", s.Type, s.Protocol, s.Port)
+		case "selinux-fcontext":
+			key = s.Type + ":" + s.Path
+		}
+		if key != "" {
+			if seenSELinux[key] {
+				return fmt.Errorf("duplicate SELinux setting %s", key)
+			}
+			seenSELinux[key] = true
+		}
 		if r.Steps[i].Type == "scheduled-job" {
 			if seenJobs[r.Steps[i].Job] {
 				return fmt.Errorf("duplicate scheduled job %q", r.Steps[i].Job)
@@ -429,6 +456,28 @@ func (s *Step) normalize() error {
 			}
 			s.Sources[i] = p.Masked().String()
 		}
+	case "selinux-mode":
+		if !oneOf(s.SELinuxMode, "enforcing", "permissive") {
+			return fmt.Errorf("SELinux mode must be enforcing or permissive")
+		}
+	case "selinux-boolean":
+		if !selinuxIdentifier.MatchString(s.SELinuxBoolean) || s.Enabled == nil {
+			return fmt.Errorf("SELinux boolean needs a valid name and enabled or disabled")
+		}
+	case "selinux-port":
+		if !selinuxTypeName.MatchString(s.SELinuxType) || !oneOf(s.Protocol, "tcp", "udp") || s.Port < 1 || s.Port > 65535 {
+			return fmt.Errorf("SELinux port needs tcp or udp, port 1-65535 and a valid type ending in _t")
+		}
+	case "selinux-fcontext":
+		if err := checkPath(s.Path); err != nil {
+			return err
+		}
+		if strings.HasSuffix(s.Path, "/") {
+			return fmt.Errorf("SELinux file context path must not end in /")
+		}
+		if !selinuxTypeName.MatchString(s.SELinuxType) {
+			return fmt.Errorf("SELinux file context needs a valid type ending in _t")
+		}
 	case "scheduled-job":
 		if !roleNamePattern.MatchString(s.Job) {
 			return fmt.Errorf("job must be a lowercase name of at most 63 characters using letters, digits and hyphens")
@@ -498,6 +547,8 @@ func (r Role) Risky() []string {
 	}
 	for i, s := range r.Steps {
 		switch {
+		case s.Type == "selinux-mode" && s.SELinuxMode == "permissive":
+			out = append(out, fmt.Sprintf("step %d sets SELinux to permissive mode", i+1))
 		case s.Type == "ntp" && s.NTP != nil && !*s.NTP:
 			out = append(out, fmt.Sprintf("step %d disables network time synchronization", i+1))
 		case s.Type == "dns":

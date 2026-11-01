@@ -197,6 +197,8 @@ func StepName(s Step) string {
 		return s.Name
 	}
 	switch s.Type {
+	case "selinux-mode", "selinux-boolean", "selinux-port", "selinux-fcontext":
+		return "SELinux " + strings.TrimPrefix(s.Type, "selinux-")
 	case "scheduled-job":
 		return "scheduled job " + s.Job
 	case "ntp":
