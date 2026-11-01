@@ -48,6 +48,10 @@ type Step struct {
 	Type    string       `json:"type"` // packages, patch, group, user, directory, file, service, sysctl, firewall, command
 	Name    string       `json:"name,omitempty"`
 
+	// scheduled jobs
+	Job      string `json:"job,omitempty"`
+	Schedule string `json:"schedule,omitempty"`
+
 	// hostname and timezone
 	Hostname    string   `json:"hostname,omitempty"`
 	Timezone    string   `json:"timezone,omitempty"`
@@ -169,6 +173,15 @@ func (r *Role) Compile(vars map[string]string) error {
 		if size > maxMarkdownBytes {
 			return fmt.Errorf("the role and its template files must be at most %d bytes", maxMarkdownBytes)
 		}
+		items, err := scanMarkdown(r.Markdown)
+		if err != nil {
+			return err
+		}
+		for _, item := range items {
+			if item.kind == "scheduled-job" && item.code != nil && len(SecretRefs(*item.code, nil)) != 0 {
+				return fmt.Errorf("line %d: scheduled job scripts cannot contain secret references; use a protected host-side credential file", item.line)
+			}
+		}
 		rendered, err := Render(r.Markdown, vars)
 		if err != nil {
 			return err
@@ -211,7 +224,14 @@ func (r *Role) Compile(vars map[string]string) error {
 		return fmt.Errorf("rollout batchSize must be 1-100")
 	}
 	seenSystem := map[string]bool{}
+	seenJobs := map[string]bool{}
 	for i := range r.Steps {
+		if r.Steps[i].Type == "scheduled-job" {
+			if seenJobs[r.Steps[i].Job] {
+				return fmt.Errorf("duplicate scheduled job %q", r.Steps[i].Job)
+			}
+			seenJobs[r.Steps[i].Job] = true
+		}
 		if r.Steps[i].Type == "hostname" || r.Steps[i].Type == "timezone" || r.Steps[i].Type == "dns" || r.Steps[i].Type == "ntp" {
 			if seenSystem[r.Steps[i].Type] {
 				return fmt.Errorf("only one %s step is allowed", r.Steps[i].Type)
@@ -409,6 +429,34 @@ func (s *Step) normalize() error {
 			}
 			s.Sources[i] = p.Masked().String()
 		}
+	case "scheduled-job":
+		if !roleNamePattern.MatchString(s.Job) {
+			return fmt.Errorf("job must be a lowercase name of at most 63 characters using letters, digits and hyphens")
+		}
+		if s.State == "" {
+			s.State = "present"
+		}
+		if !oneOf(s.State, "present", "absent") {
+			return fmt.Errorf("state must be present or absent")
+		}
+		if s.State == "absent" {
+			if s.Schedule != "" || s.Run != "" || s.User != "" {
+				return fmt.Errorf("absent jobs must not specify schedule, user or command")
+			}
+		} else {
+			if err := validateSchedule(s.Schedule); err != nil {
+				return err
+			}
+			if s.User == "" {
+				s.User = "root"
+			}
+			if !accountPattern.MatchString(s.User) {
+				return fmt.Errorf("invalid job user")
+			}
+			if strings.TrimSpace(s.Run) == "" || len(s.Run) > maxCommandSize {
+				return fmt.Errorf("job needs a script of at most %d bytes", maxCommandSize)
+			}
+		}
 	case "command":
 		if strings.TrimSpace(s.Run) == "" || len(s.Run) > maxCommandSize {
 			return fmt.Errorf("needs a script of at most %d bytes", maxCommandSize)
@@ -456,6 +504,8 @@ func (r Role) Risky() []string {
 			out = append(out, fmt.Sprintf("step %d changes the host DNS resolver configuration", i+1))
 		case s.Type == "hostname":
 			out = append(out, fmt.Sprintf("step %d changes the host hostname", i+1))
+		case s.Type == "scheduled-job" && s.State == "present":
+			out = append(out, fmt.Sprintf("step %d schedules a custom script as %s", i+1, s.User))
 		case s.Type == "command":
 			out = append(out, fmt.Sprintf("step %d runs a custom script as root", i+1))
 		case s.Check != "":
@@ -478,7 +528,7 @@ func (r Role) Risky() []string {
 // HasCommand reports whether approval needs the command confirmation.
 func (r Role) HasCommand() bool {
 	for _, s := range r.Steps {
-		if s.Type == "command" || s.Check != "" {
+		if (s.Type == "scheduled-job" && s.State != "absent") || s.Type == "command" || s.Check != "" {
 			return true
 		}
 	}

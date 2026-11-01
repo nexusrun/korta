@@ -197,6 +197,8 @@ func StepName(s Step) string {
 		return s.Name
 	}
 	switch s.Type {
+	case "scheduled-job":
+		return "scheduled job " + s.Job
 	case "ntp":
 		return "network time synchronization"
 	case "dns":

@@ -29,6 +29,7 @@ import (
 // in a heading decides, so "Create users" manages users.
 var sectionKinds = []struct{ kind, prefix string }{
 	{"aws-instance", "aws"},
+	{"scheduled-job", "scheduled"},
 	{"dns", "dns"}, {"hostname", "hostname"}, {"timezone", "timezone"}, {"time", "time"},
 	{"group", "group"},
 	{"user", "user"}, {"user", "account"},
@@ -46,7 +47,7 @@ var sectionKinds = []struct{ kind, prefix string }{
 var sectionTitles = map[string]string{
 	"aws-instance": "AWS instance", "aws-network": "AWS network", "aws-lb": "AWS load balancer", "aws-dns": "AWS DNS", "time": "Time", "ntp": "Time", "dns": "DNS", "hostname": "Hostname", "timezone": "Timezone", "group": "Groups", "user": "Users", "directory": "Directories", "packages": "Packages",
 	"service": "Services", "file": "Files", "sysctl": "Kernel settings", "firewall": "Firewall",
-	"patch": "Updates", "command": "Commands",
+	"patch": "Updates", "command": "Commands", "scheduled-job": "Scheduled jobs",
 }
 
 const sectionHelp = "start its heading with Hostname, Time, DNS, Variables, Users, Groups, Directories, Files, Packages, Services, Kernel settings, Firewall, Updates or Commands"
@@ -251,7 +252,7 @@ func parseItem(it mdItem) ([]Step, error) {
 	if it.kind == "vars" && it.code == nil {
 		return nil, nil // read by Variables before rendering
 	}
-	if it.code != nil && it.kind != "file" && it.kind != "command" {
+	if it.code != nil && it.kind != "file" && it.kind != "command" && it.kind != "scheduled-job" {
 		return nil, it.errorf("code blocks are only for Files and Commands sections")
 	}
 	name := stepTitle(it)
@@ -314,6 +315,8 @@ func parseItem(it mdItem) ([]Step, error) {
 		steps, err = parseFirewall(it)
 	case "patch":
 		steps, err = parsePatch(it)
+	case "scheduled-job":
+		steps, err = parseScheduledJob(it)
 	case "command":
 		steps, err = parseCommand(it)
 	}
@@ -880,6 +883,14 @@ func ToMarkdown(steps []Step) string {
 				b.WriteString(", except " + strings.Join(s.Exclude, ", "))
 			}
 			b.WriteString("\n")
+		case "scheduled-job":
+			fmt.Fprintf(&b, "- %s\n", s.Job)
+			if s.State == "absent" {
+				b.WriteString("  - state: absent\n")
+			} else {
+				fmt.Fprintf(&b, "  - schedule: %s\n  - user: %s\n", s.Schedule, s.User)
+				writeFence(&b, s.Run, "sh")
+			}
 		case "command":
 			b.WriteString("- Run script")
 			if s.Creates != "" {
