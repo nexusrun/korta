@@ -98,6 +98,10 @@ func RunHosts(ctx context.Context, r Role, targets []Target, apply bool, paralle
 // apply false, steps only report what they would change.
 func RunHost(ctx context.Context, r Role, t Target, apply bool) HostResult {
 	res := HostResult{InstanceID: t.ID, Instance: t.Name, Status: "ok"}
+	if r.GCP() != nil {
+		res.Status, res.Error = "failed", "GCP provisioning requires a Korta Enterprise manager"
+		return res
+	}
 	if r.AWS() != nil || r.AWSNetwork() != nil {
 		res.Status, res.Error = "failed", "AWS provisioning requires a Korta Enterprise manager; use korta roles create, plan and apply"
 		return res
@@ -108,6 +112,10 @@ func RunHost(ctx context.Context, r Role, t Target, apply bool) HostResult {
 	}
 	if err != nil {
 		res.Status, res.Error = "failed", err.Error()
+		return res
+	}
+	if r.GCP() != nil {
+		res.Status, res.Error = "failed", "GCP provisioning requires a Korta Enterprise manager"
 		return res
 	}
 	if r.AWS() != nil {

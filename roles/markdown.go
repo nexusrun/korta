@@ -29,6 +29,7 @@ import (
 // in a heading decides, so "Create users" manages users.
 var sectionKinds = []struct{ kind, prefix string }{
 	{"aws-instance", "aws"},
+	{"gcp-instance", "gcp"},
 	{"selinux", "selinux"},
 	{"scheduled-job", "scheduled"},
 	{"dns", "dns"}, {"hostname", "hostname"}, {"timezone", "timezone"}, {"time", "time"},
@@ -46,7 +47,7 @@ var sectionKinds = []struct{ kind, prefix string }{
 }
 
 var sectionTitles = map[string]string{
-	"aws-instance": "AWS instance", "aws-network": "AWS network", "aws-lb": "AWS load balancer", "aws-dns": "AWS DNS", "time": "Time", "ntp": "Time", "dns": "DNS", "hostname": "Hostname", "timezone": "Timezone", "group": "Groups", "user": "Users", "directory": "Directories", "packages": "Packages",
+	"gcp-instance": "GCP instance", "aws-instance": "AWS instance", "aws-network": "AWS network", "aws-lb": "AWS load balancer", "aws-dns": "AWS DNS", "time": "Time", "ntp": "Time", "dns": "DNS", "hostname": "Hostname", "timezone": "Timezone", "group": "Groups", "user": "Users", "directory": "Directories", "packages": "Packages",
 	"service": "Services", "file": "Files", "sysctl": "Kernel settings", "firewall": "Firewall",
 	"selinux-mode": "SELinux", "selinux-boolean": "SELinux", "selinux-port": "SELinux", "selinux-fcontext": "SELinux", "patch": "Updates", "command": "Commands", "scheduled-job": "Scheduled jobs",
 }
@@ -84,9 +85,19 @@ func ParseMarkdown(src string) ([]Step, error) {
 		return nil, err
 	}
 	steps := []Step{}
+	gcp, err := parseGCP(items)
+	if err != nil {
+		return nil, err
+	}
+	if gcp != nil {
+		steps = append(steps, *gcp)
+	}
 	cloud, err := parseAWS(items)
 	if err != nil {
 		return nil, err
+	}
+	if cloud != nil && gcp != nil {
+		return nil, fmt.Errorf("a role can provision only one cloud")
 	}
 	if cloud != nil {
 		steps = append(steps, *cloud)
@@ -95,12 +106,15 @@ func ParseMarkdown(src string) ([]Step, error) {
 	if err != nil {
 		return nil, err
 	}
+	if network != nil && gcp != nil {
+		return nil, fmt.Errorf("a role can provision only one cloud")
+	}
 	if network != nil {
 		return []Step{*network}, nil
 	}
 	sysctl := -1
 	for _, it := range items {
-		if it.kind == "aws-instance" || it.kind == "aws-lb" || it.kind == "aws-dns" {
+		if it.kind == "gcp-instance" || it.kind == "aws-instance" || it.kind == "aws-lb" || it.kind == "aws-dns" {
 			continue
 		}
 		parsed, err := parseItem(it)
@@ -177,7 +191,7 @@ func scanMarkdown(src string) ([]mdItem, error) {
 			continue
 		}
 		if m := headingRe.FindStringSubmatch(trimmed); m != nil && m[2] != "" && !strings.HasPrefix(m[2], "!") {
-			if (kind == "aws-instance" || kind == "aws-network" || kind == "aws-lb") && open < 0 {
+			if (kind == "gcp-instance" || kind == "aws-instance" || kind == "aws-network" || kind == "aws-lb") && open < 0 {
 				return nil, fmt.Errorf("line %d: %s needs field: value bullets", titleLine, sectionTitles[kind])
 			}
 			kind, title, titleLine, open = headingKind(m[2]), m[2], n, -1
@@ -216,7 +230,7 @@ func scanMarkdown(src string) ([]mdItem, error) {
 		items = append(items, mdItem{kind: kind, title: title, line: n, indent: indent, text: text})
 		open = len(items) - 1
 	}
-	if (kind == "aws-instance" || kind == "aws-network" || kind == "aws-lb") && open < 0 {
+	if (kind == "gcp-instance" || kind == "aws-instance" || kind == "aws-network" || kind == "aws-lb") && open < 0 {
 		return nil, fmt.Errorf("line %d: %s needs field: value bullets", titleLine, sectionTitles[kind])
 	}
 	return items, nil
@@ -774,6 +788,12 @@ func ToMarkdown(steps []Step) string {
 		case "aws-network":
 			if s.Network != nil {
 				b.WriteString(s.Network.markdown())
+			}
+		case "gcp-instance":
+			if g := s.GCP; g != nil {
+				for _, field := range [][2]string{{"name", g.Name}, {"count", strconv.Itoa(g.Count)}, {"project", g.Project}, {"zone", g.Zone}, {"size", g.MachineType}, {"image-project", g.ImageProject}, {"image-family", g.ImageFamily}, {"subnet-project", g.SubnetProject}, {"subnet", g.Subnet}, {"user", g.User}, {"address", g.Address}} {
+					fmt.Fprintf(&b, "- %s: %s\n", field[0], field[1])
+				}
 			}
 		case "aws-instance":
 			a := s.AWS

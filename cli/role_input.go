@@ -86,7 +86,11 @@ func (c *client) rolePayload(b []byte, explicitMarkdown bool, dir string) ([]byt
 		if err != nil {
 			return nil, err
 		}
-		if !aws {
+		gcp, err := roles.ParseGCP(string(b))
+		if err != nil {
+			return nil, err
+		}
+		if !aws && gcp == nil {
 			return nil, fmt.Errorf("choose role targets with --instance INSTANCE_ID or --label KEY=VALUE")
 		}
 	}
