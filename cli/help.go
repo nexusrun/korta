@@ -11,6 +11,9 @@ Run roles over SSH (no manager needed):
   apply ROLE.md -i hosts.md [--limit SELECTOR] [--var NAME=VALUE] [--yes]
                    [--confirm-commands] [--batch-size N] [--continue-on-failure]
                                                 Plan, confirm, then apply
+  disk inspect DEVICE -i hosts.md               Inspect a stable disk ID
+  copy SOURCE DEST -i hosts.md [--dry-run]      Copy a file to selected hosts
+  network inspect INTERFACE -i hosts.md         Inspect interface addresses and routes
   inventory -i hosts.md [--limit SELECTOR]      List hosts with their keys
                                                 and variables
 

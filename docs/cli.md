@@ -321,3 +321,55 @@ korta roles destroy role_ID --confirm web   # plan and approve terminating them
 second approver; that person runs `korta roles apply role_ID --approve` (with
 `--confirm NAME` for a destroy plan). AWS credentials are configured on the
 manager, never in role files or command arguments.
+
+## Inspect host networking
+
+Use the standalone CLI to inspect the addresses and routes of an interface on
+selected inventory hosts, without changing them:
+
+```sh
+korta network inspect eth0 -i hosts.md --limit env=staging
+korta network inspect eth0 -i hosts.md --json
+```
+
+The output contains `iproute2` JSON for the interface and its IPv4 and IPv6
+routes. Each host needs the `ip` command. Korta uses the same inventory, SSH
+configuration, identity and `--timeout` options as offline role commands. A
+failed host is reported and causes a nonzero exit status. This command does
+not configure interfaces, DNS or routes.
+
+## Copy a file to hosts
+
+Copy a local regular file, including binary data, to an absolute path on each
+selected inventory host:
+
+```sh
+korta copy ./config/app.conf /etc/app.conf -i hosts.md --limit staging --dry-run
+korta copy ./config/app.conf /etc/app.conf -i hosts.md --limit staging
+```
+
+Korta inspects every destination before asking for confirmation. Use `--yes`
+for unattended runs. `--owner`, `--group` and `--mode` set the destination
+metadata; defaults are `root`, the chosen owner, and `0644`. The destination's
+parent directory must exist. Korta refuses symlink and non-file destinations,
+checks for changes since inspection, transfers through SSH stdin and replaces
+the file atomically. It restores the SELinux label when `restorecon` is
+available. A source changed during transfer or a destination changed since the
+plan is refused. `--json` prints machine-readable results. An error on one host
+is reported and returns a nonzero exit status.
+
+This command uses the offline inventory and existing SSH configuration; it does
+not send files through the Enterprise manager. Protect sensitive source files
+on the local and remote hosts using appropriate permissions.
+
+## Inspect a disk
+
+To inspect one explicitly named block device on selected inventory hosts:
+
+```sh
+korta disk inspect /dev/disk/by-id/DEVICE -i hosts.md --limit staging
+```
+
+The device must have a serial number or WWN. This read-only probe currently
+refuses a device with child devices; it does not partition, format or mount
+storage. Use `--json` for machine-readable output.

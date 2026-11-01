@@ -12,6 +12,8 @@ import (
 
 // commands lists each resource's actions, for routing errors and suggestions.
 var commands = map[string][]string{
+	"disk":        {"inspect"},
+	"network":     {"inspect"},
 	"instances":   {"list", "get", "create", "update", "delete", "check", "trust-host-key", "console"},
 	"deployments": {"list", "get", "create", "update", "delete", "apply", "status", "logs", "restart", "rollback", "backup", "backups", "restore", "action", "connection"},
 	"roles":       {"list", "get", "create", "update", "delete", "preview", "plan", "apply", "run", "destroy"},
@@ -22,7 +24,7 @@ var commands = map[string][]string{
 }
 
 // topLevel are commands without a subcommand.
-var topLevel = []string{"login", "logout", "health", "types", "ca", "session", "audit", "provision", "api", "version", "plan", "apply", "inventory"}
+var topLevel = []string{"login", "logout", "health", "types", "ca", "session", "audit", "provision", "api", "version", "plan", "apply", "inventory", "copy"}
 
 // waitByDefault are commands whose result is only useful once the operation
 // finishes. --wait=false turns waiting off.

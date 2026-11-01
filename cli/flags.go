@@ -13,12 +13,12 @@ type options struct {
 }
 
 var booleanFlags = map[string]bool{
-	"json": true, "wait": true, "approve": true, "confirm-commands": true, "help": true,
+	"dry-run": true, "json": true, "wait": true, "approve": true, "confirm-commands": true, "help": true,
 	"continue-on-failure": true, "insecure": true, "yes": true, "destroy": true,
 }
 
 var valueFlags = map[string]bool{
-	"server": true, "token-file": true, "config": true, "timeout": true, "file": true, "data": true,
+	"owner": true, "group": true, "mode": true, "server": true, "token-file": true, "config": true, "timeout": true, "file": true, "data": true,
 	"output": true, "role": true, "database": true, "target": true, "plan": true, "name": true,
 	"private-key": true, "markdown": true, "text": true, "instance": true, "label": true,
 	"description": true, "batch-size": true, "host": true, "port": true, "user": true, "key": true,

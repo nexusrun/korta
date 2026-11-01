@@ -66,6 +66,15 @@ func Run(ctx context.Context, args []string, in io.Reader, out, errOut io.Writer
 		}
 	}
 	switch o.args[0] {
+	case "disk":
+		c := &client{in: in, out: out, errOut: errOut, opts: o}
+		return c.inspectDisk(ctx)
+	case "copy":
+		c := &client{in: in, out: out, errOut: errOut, opts: o}
+		return c.copyFile(ctx)
+	case "network":
+		c := &client{in: in, out: out, errOut: errOut, opts: o}
+		return c.inspectNetwork(ctx)
 	case "plan", "apply", "inventory":
 		// Offline mode needs no manager or credentials.
 		c := &client{in: in, out: out, errOut: errOut, opts: o}

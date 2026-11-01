@@ -29,6 +29,7 @@ import (
 // in a heading decides, so "Create users" manages users.
 var sectionKinds = []struct{ kind, prefix string }{
 	{"aws-instance", "aws"},
+	{"dns", "dns"}, {"hostname", "hostname"}, {"timezone", "timezone"}, {"time", "time"},
 	{"group", "group"},
 	{"user", "user"}, {"user", "account"},
 	{"directory", "director"}, {"directory", "folder"},
@@ -43,12 +44,12 @@ var sectionKinds = []struct{ kind, prefix string }{
 }
 
 var sectionTitles = map[string]string{
-	"aws-instance": "AWS instance", "aws-network": "AWS network", "aws-lb": "AWS load balancer", "aws-dns": "AWS DNS", "group": "Groups", "user": "Users", "directory": "Directories", "packages": "Packages",
+	"aws-instance": "AWS instance", "aws-network": "AWS network", "aws-lb": "AWS load balancer", "aws-dns": "AWS DNS", "time": "Time", "ntp": "Time", "dns": "DNS", "hostname": "Hostname", "timezone": "Timezone", "group": "Groups", "user": "Users", "directory": "Directories", "packages": "Packages",
 	"service": "Services", "file": "Files", "sysctl": "Kernel settings", "firewall": "Firewall",
 	"patch": "Updates", "command": "Commands",
 }
 
-const sectionHelp = "start its heading with Variables, Users, Groups, Directories, Files, Packages, Services, Kernel settings, Firewall, Updates or Commands"
+const sectionHelp = "start its heading with Hostname, Time, DNS, Variables, Users, Groups, Directories, Files, Packages, Services, Kernel settings, Firewall, Updates or Commands"
 
 var (
 	headingRe = regexp.MustCompile(`^(#{1,6})\s*(.*?)\s*#*$`)
@@ -257,6 +258,46 @@ func parseItem(it mdItem) ([]Step, error) {
 	var steps []Step
 	var err error
 	switch it.kind {
+	case "time":
+		if len(it.extra) > 0 || it.code != nil {
+			return nil, it.errorf("write timezone or ntp on one bullet")
+		}
+		fields := strings.Fields(strings.ReplaceAll(it.text, "`", ""))
+		if len(fields) != 2 {
+			return nil, it.errorf("write timezone America/Phoenix or ntp enabled")
+		}
+		switch fields[0] {
+		case "timezone":
+			steps = []Step{{Type: "timezone", Timezone: fields[1]}}
+		case "ntp":
+			if fields[1] != "enabled" && fields[1] != "disabled" {
+				return nil, it.errorf("ntp must be enabled or disabled")
+			}
+			enabled := fields[1] == "enabled"
+			steps = []Step{{Type: "ntp", NTP: &enabled}}
+		default:
+			return nil, it.errorf("use timezone or ntp")
+		}
+	case "dns":
+		if len(it.extra) > 0 || it.code != nil {
+			return nil, it.errorf("write nameservers on one bullet")
+		}
+		value := strings.TrimSpace(strings.ReplaceAll(it.text, "`", ""))
+		key, rest, ok := strings.Cut(value, " ")
+		if !ok || (key != "nameservers" && key != "nameserver") {
+			return nil, it.errorf("write nameservers followed by 1-3 IP addresses")
+		}
+		steps = []Step{{Type: "dns", Nameservers: strings.Fields(strings.ReplaceAll(rest, ",", " "))}}
+	case "hostname", "timezone":
+		if len(it.extra) > 0 || it.code != nil {
+			return nil, it.errorf("write a single value on the bullet")
+		}
+		value := strings.TrimSpace(strings.ReplaceAll(it.text, "`", ""))
+		if it.kind == "hostname" {
+			steps = []Step{{Type: "hostname", Hostname: value}}
+		} else {
+			steps = []Step{{Type: "timezone", Timezone: value}}
+		}
 	case "group":
 		steps, err = parseGroup(it)
 	case "user":
@@ -748,6 +789,20 @@ func ToMarkdown(steps []Step) string {
 					b.WriteString("\n# AWS DNS\n\n- " + strings.Join(a.DNS, "\n- ") + "\n")
 				}
 			}
+		case "ntp":
+			if s.NTP != nil {
+				state := "disabled"
+				if *s.NTP {
+					state = "enabled"
+				}
+				fmt.Fprintf(&b, "- ntp %s\n", state)
+			}
+		case "dns":
+			fmt.Fprintf(&b, "- nameservers %s\n", strings.Join(s.Nameservers, ", "))
+		case "hostname":
+			fmt.Fprintf(&b, "- %s\n", s.Hostname)
+		case "timezone":
+			fmt.Fprintf(&b, "- %s\n", s.Timezone)
 		case "group":
 			switch {
 			case s.State == "absent":
