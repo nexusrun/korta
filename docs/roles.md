@@ -43,6 +43,9 @@ changes what differs from the description.
 | Firewall        | `open 443/tcp from 10.0.0.0/8`; `close 23 from anywhere`                |
 | Updates         | `security updates, reboot if required, except kernel`                   |
 | Commands        | a code block, optionally under `- Install the agent unless /opt/agent exists` |
+| Hostname        | `web-01.example.com` sets the static hostname using `hostnamectl` |
+| Time            | `timezone America/Phoenix`; `ntp enabled` or `ntp disabled` using `timedatectl` |
+| DNS             | `nameservers 1.1.1.1, 8.8.8.8` for manually managed resolver files |
 | Variables       | `domain = example.com`: defaults for `{{ domain }}` (see below)         |
 
 A Files bullet can end with `check with COMMAND`. Korta puts the new file in
@@ -271,3 +274,32 @@ private subnets the upper half, a sixteenth each. In an adopted VPC, Korta
 only adds its own subnets, gateways and routes, never changes what was there,
 and Destroy removes only what it created. Instances with `address: private`
 go to the private subnets, others to the public ones.
+
+## Hostname, time and DNS
+
+```markdown
+# Hostname
+- web-01.example.com
+
+# Time
+- timezone America/Phoenix
+- ntp enabled
+
+# DNS
+- nameservers 1.1.1.1, 8.8.8.8
+```
+
+The hostname and time steps use `hostnamectl` and `timedatectl` on systemd
+hosts. Timezones must be installed in `/usr/share/zoneinfo`. Enabling NTP asks
+`timedatectl` to enable the host's configured time-synchronization service; it
+does not choose or install one. A hostname or timezone can also be written in
+its own `# Hostname` or `# Timezone` section. A role may contain one step for
+each setting.
+
+DNS accepts one to three distinct IPv4 or IPv6 unicast nameserver addresses.
+It updates nameserver lines in a regular, manually managed `/etc/resolv.conf`,
+preserving unrelated lines. Korta refuses symlinked resolver files and hosts
+with active NetworkManager, systemd-resolved or resolvconf; configure those
+services instead. Do not use this step if another service manages the file.
+The plan reports DNS and hostname changes for review. Set appropriate resolver
+addresses for your own environment; the addresses above are examples.

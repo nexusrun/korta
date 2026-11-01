@@ -131,6 +131,53 @@ var scripts = template.Must(template.New("").Funcs(template.FuncMap{
 result() { printf 'KORTA_RESULT %s %s\n' "$1" "$2"; }
 {{end}}
 
+{{define "ntp"}}{{template "prelude"}}command -v timedatectl >/dev/null 2>&1 || { echo "timedatectl is required; use a systemd host" >&2; exit 1; }
+current=$(timedatectl show --property=NTP --value)
+[ "$current" = yes ] || [ "$current" = no ] || { echo "cannot determine NTP setting on this host" >&2; exit 1; }
+if [ "$current" = "{{if deref .S.NTP}}yes{{else}}no{{end}}" ]; then result ok "NTP is {{if deref .S.NTP}}enabled{{else}}disabled{{end}}"; exit 0; fi
+{{if .Apply}}timedatectl set-ntp {{if deref .S.NTP}}true{{else}}false{{end}}
+result changed "{{if deref .S.NTP}}enabled{{else}}disabled{{end}} NTP"
+{{else}}result changed "would {{if deref .S.NTP}}enable{{else}}disable{{end}} NTP"
+{{end}}{{end}}
+
+{{define "dns"}}{{template "prelude"}}file=/etc/resolv.conf
+[ -f "$file" ] && [ ! -L "$file" ] || { echo "DNS needs a regular /etc/resolv.conf; configure the host's resolver manager instead" >&2; exit 1; }
+command -v systemctl >/dev/null 2>&1 && systemctl show --property=SystemState --value >/dev/null 2>&1 || { echo "cannot determine active resolver managers; check systemd" >&2; exit 1; }
+for service in systemd-resolved NetworkManager resolvconf; do
+  if systemctl is-active --quiet "$service"; then echo "$service is active; manage DNS in that service instead" >&2; exit 1; fi
+done
+current=$(cat "$file")
+desired=$(awk '!/^[[:space:]]*nameserver([[:space:]]|$)/ {print}' "$file"; {{range .S.Nameservers}}printf 'nameserver %s\n' '{{.}}'; {{end}}:)
+if [ "$current" = "$desired" ]; then result ok "DNS nameservers are configured"; exit 0; fi
+{{if .Apply}}tmp=$(mktemp /etc/.xela-resolv.XXXXXXXX)
+trap 'rm -f "$tmp"' EXIT HUP INT TERM
+printf '%s\n' "$desired" > "$tmp"
+chmod --reference="$file" "$tmp"
+chown --reference="$file" "$tmp"
+[ "$(cat "$file")" = "$current" ] || { echo "resolver configuration changed during apply; plan again" >&2; exit 1; }
+mv -f "$tmp" "$file"
+if command -v restorecon >/dev/null 2>&1; then restorecon -F "$file" || { echo "DNS file updated, but SELinux relabel failed; restore its context" >&2; exit 1; }; fi
+result changed "updated DNS nameservers"
+{{else}}result changed "would update DNS nameservers in /etc/resolv.conf"
+{{end}}{{end}}
+
+{{define "hostname"}}{{template "prelude"}}command -v hostnamectl >/dev/null 2>&1 || { echo "hostnamectl is required; use a systemd host" >&2; exit 1; }
+current=$(hostnamectl --static)
+if [ "$current" = "{{.S.Hostname}}" ]; then result ok "hostname is {{.S.Hostname}}"; exit 0; fi
+{{if .Apply}}hostnamectl set-hostname "{{.S.Hostname}}"
+result changed "set hostname to {{.S.Hostname}}"
+{{else}}result changed "would set hostname from $current to {{.S.Hostname}}"
+{{end}}{{end}}
+
+{{define "timezone"}}{{template "prelude"}}command -v timedatectl >/dev/null 2>&1 || { echo "timedatectl is required; use a systemd host" >&2; exit 1; }
+[ -f "/usr/share/zoneinfo/{{.S.Timezone}}" ] || { echo "timezone is not installed; check the tzdata package" >&2; exit 1; }
+current=$(timedatectl show --property=Timezone --value)
+if [ "$current" = "{{.S.Timezone}}" ]; then result ok "timezone is {{.S.Timezone}}"; exit 0; fi
+{{if .Apply}}timedatectl set-timezone "{{.S.Timezone}}"
+result changed "set timezone to {{.S.Timezone}}"
+{{else}}result changed "would set timezone from $current to {{.S.Timezone}}"
+{{end}}{{end}}
+
 {{define "packages"}}{{template "prelude"}}pkgs="{{join .S.Packages " "}}"
 installed() {
 {{if eq .Family "apt"}}  dpkg-query -W -f='${Status}' "$1" 2>/dev/null | grep -q "install ok installed"

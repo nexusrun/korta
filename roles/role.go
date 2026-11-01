@@ -48,6 +48,12 @@ type Step struct {
 	Type    string       `json:"type"` // packages, patch, group, user, directory, file, service, sysctl, firewall, command
 	Name    string       `json:"name,omitempty"`
 
+	// hostname and timezone
+	Hostname    string   `json:"hostname,omitempty"`
+	Timezone    string   `json:"timezone,omitempty"`
+	Nameservers []string `json:"nameservers,omitempty"`
+	NTP         *bool    `json:"ntp,omitempty"`
+
 	// packages
 	State    string   `json:"state,omitempty"` // packages: present, absent, latest; file/user: present, absent; service: started, stopped; firewall: open, closed
 	Packages []string `json:"packages,omitempty"`
@@ -100,6 +106,8 @@ type Step struct {
 }
 
 var (
+	hostnameLabel   = regexp.MustCompile(`^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?$`)
+	timezoneName    = regexp.MustCompile(`^(UTC|[A-Za-z0-9_+.-]+(/[A-Za-z0-9_+.-]+)+)$`)
 	roleNamePattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
 	packagePattern  = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9.+_:-]{0,127}$`)
 	servicePattern  = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9@._-]{0,127}$`)
@@ -202,7 +210,14 @@ func (r *Role) Compile(vars map[string]string) error {
 	if r.Rollout.BatchSize < 1 || r.Rollout.BatchSize > 100 {
 		return fmt.Errorf("rollout batchSize must be 1-100")
 	}
+	seenSystem := map[string]bool{}
 	for i := range r.Steps {
+		if r.Steps[i].Type == "hostname" || r.Steps[i].Type == "timezone" || r.Steps[i].Type == "dns" || r.Steps[i].Type == "ntp" {
+			if seenSystem[r.Steps[i].Type] {
+				return fmt.Errorf("only one %s step is allowed", r.Steps[i].Type)
+			}
+			seenSystem[r.Steps[i].Type] = true
+		}
 		if (r.Steps[i].Type == "aws-instance" || r.Steps[i].Type == "aws-network") && i != 0 {
 			return fmt.Errorf("an AWS section must be the first step")
 		}
@@ -231,6 +246,40 @@ func (s *Step) normalize() error {
 			return fmt.Errorf("AWS settings are required")
 		}
 		return s.AWS.normalize()
+	case "hostname":
+		if len(s.Hostname) == 0 || len(s.Hostname) > 253 {
+			return fmt.Errorf("hostname must be a valid hostname")
+		}
+		for _, label := range strings.Split(s.Hostname, ".") {
+			if !hostnameLabel.MatchString(label) {
+				return fmt.Errorf("hostname needs DNS labels of 1-63 letters, digits or hyphens")
+			}
+		}
+		s.Hostname = strings.ToLower(s.Hostname)
+	case "timezone":
+		if !timezoneName.MatchString(s.Timezone) || strings.Contains(s.Timezone, "..") {
+			return fmt.Errorf("timezone must be UTC or an IANA name such as America/Phoenix")
+		}
+	case "ntp":
+		if s.NTP == nil {
+			return fmt.Errorf("NTP needs enabled or disabled")
+		}
+	case "dns":
+		if len(s.Nameservers) < 1 || len(s.Nameservers) > 3 {
+			return fmt.Errorf("DNS needs 1-3 nameserver IP addresses")
+		}
+		seen := map[string]bool{}
+		for i, raw := range s.Nameservers {
+			addr, err := netip.ParseAddr(raw)
+			if err != nil || addr.Zone() != "" || addr.IsUnspecified() || addr.IsMulticast() {
+				return fmt.Errorf("DNS nameservers must be unicast IP addresses")
+			}
+			s.Nameservers[i] = addr.String()
+			if seen[s.Nameservers[i]] {
+				return fmt.Errorf("DNS nameservers must be distinct")
+			}
+			seen[s.Nameservers[i]] = true
+		}
 	case "packages":
 		if s.State == "" {
 			s.State = "present"
@@ -370,7 +419,7 @@ func (s *Step) normalize() error {
 			}
 		}
 	default:
-		return fmt.Errorf("unknown step type; use packages, patch, group, user, directory, file, service, sysctl, firewall or command")
+		return fmt.Errorf("unknown step type; use hostname, timezone, ntp, dns, packages, patch, group, user, directory, file, service, sysctl, firewall or command")
 	}
 	return nil
 }
@@ -401,6 +450,12 @@ func (r Role) Risky() []string {
 	}
 	for i, s := range r.Steps {
 		switch {
+		case s.Type == "ntp" && s.NTP != nil && !*s.NTP:
+			out = append(out, fmt.Sprintf("step %d disables network time synchronization", i+1))
+		case s.Type == "dns":
+			out = append(out, fmt.Sprintf("step %d changes the host DNS resolver configuration", i+1))
+		case s.Type == "hostname":
+			out = append(out, fmt.Sprintf("step %d changes the host hostname", i+1))
 		case s.Type == "command":
 			out = append(out, fmt.Sprintf("step %d runs a custom script as root", i+1))
 		case s.Check != "":
