@@ -351,3 +351,45 @@ Install the host's SELinux management tools, including `semanage` and
 `restorecon`, before using these steps. Korta refuses disabled SELinux: enabling
 or disabling it requires a separately planned reboot and relabeling. Review
 permissive mode carefully, since SELinux logs violations without enforcing them.
+
+## Create GCP instances (Enterprise)
+
+The manager creates Compute Engine instances and then runs the remaining role
+steps over SSH. The manager uses Google Application Default Credentials; enable
+the Compute Engine API and give those credentials permission to read the
+project, image, machine type and subnet and create instances. No credentials
+belong in the role. For local development, set up Application Default
+Credentials with `gcloud auth application-default login`.
+
+```markdown
+# GCP instance
+- name: web
+- project: my-gcp-project
+- zone: us-central1-a
+
+# Packages
+- nginx
+```
+
+Create the role through the Enterprise console or with `korta roles create
+--name web --file web.md`, then plan and approve it. A plan resolves and shows
+the image and subnet. GCP does not provide an EC2-style launch dry run, so a
+successful plan does not prove that instance creation is permitted. A new
+host's configuration is checked after creation.
+
+The defaults are one `e2-micro` instance, the Ubuntu 24.04 image family, the
+project's `default` subnet, user `korta`, and an ephemeral public address.
+Set `count`, `size`, `image-project`, `image-family`, `subnet-project`,
+`subnet`, `user`, or `address: private` to override them. Private addresses
+require a route from the manager. The subnet and firewall must already exist
+and allow SSH from the manager; Korta does not create GCP firewall rules.
+Instance metadata SSH keys must be permitted. OS Login and organization
+policies requiring it are not supported by this workflow. Korta checks the
+project metadata but cannot determine every organization policy in advance.
+
+An interrupted create retains a reservation and retries with the same GCP
+request ID. Configuration failures retain the VM for inspection and retry.
+Korta does not yet destroy GCP VMs; delete a VM in Google Cloud first, then
+remove it from Korta. Do not remove an unresolved launch reservation before
+recovering its outcome. Boot disks are configured for automatic deletion with
+their VM.

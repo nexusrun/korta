@@ -40,6 +40,13 @@ func (c *client) loadRole(path string) (*localRole, error) {
 	if err != nil {
 		return nil, err
 	}
+	gcp, err := roles.ParseGCP(string(b))
+	if err != nil {
+		return nil, err
+	}
+	if gcp != nil {
+		return nil, fmt.Errorf("GCP provisioning requires a Korta Enterprise manager; use korta roles create, plan and apply")
+	}
 	aws, err := roles.ProvisionsAWS(string(b))
 	if err != nil {
 		return nil, err
