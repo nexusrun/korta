@@ -1,6 +1,7 @@
 package roles
 
 import (
+	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
 	"net/netip"
@@ -75,6 +76,11 @@ func Script(role string, s Step, h Host, apply, changedBefore bool) (string, err
 		if data["Mode"] == "" {
 			data["Mode"] = "0"
 		}
+	case "scheduled-job":
+		data["JobID"] = fmt.Sprintf("%x", sha256.Sum256([]byte(role+"\x00"+s.Job)))
+		command := base64.StdEncoding.EncodeToString([]byte(s.Run))
+		line := s.Schedule + " " + s.User + " /bin/sh -c 'echo " + command + " | base64 -d | /bin/sh'\n"
+		data["B64"] = base64.StdEncoding.EncodeToString([]byte("# Managed by Xela role " + role + "\n" + line))
 	case "command":
 		data["B64"] = base64.StdEncoding.EncodeToString([]byte(s.Run))
 	case "sysctl":
@@ -130,6 +136,24 @@ var scripts = template.Must(template.New("").Funcs(template.FuncMap{
 {{define "prelude"}}set -eu
 result() { printf 'KORTA_RESULT %s %s\n' "$1" "$2"; }
 {{end}}
+
+{{define "scheduled-job"}}{{template "prelude"}}path='/etc/cron.d/xela-{{.JobID}}'
+[ ! -L "$path" ] || { echo "scheduled job path is a symlink; remove it before continuing" >&2; exit 1; }
+{{if eq .S.State "absent"}}if [ ! -e "$path" ]; then result ok 'job absent'; exit 0; fi
+{{if .Apply}}rm -f -- "$path"{{end}}
+result changed 'job removed'
+{{else}}[ -d /etc/cron.d ] || { echo "/etc/cron.d is missing; install a cron service first" >&2; exit 1; }
+{{if not .UserPlanned}}getent passwd '{{.S.User}}' >/dev/null || { echo 'scheduled job user does not exist' >&2; exit 1; }{{end}}
+if [ -f "$path" ] && [ "$(stat -c '%a:%u:%g' "$path")" = 644:0:0 ] && printf '%s' '{{.B64}}' | base64 -d | cmp -s - "$path"; then result ok 'job configured'; exit 0; fi
+{{if .Apply}}tmp=$(mktemp /etc/cron.d/.xela-job.XXXXXX)
+trap 'rm -f "$tmp"' EXIT
+printf '%s' '{{.B64}}' | base64 -d > "$tmp"
+chown root:root "$tmp"
+chmod 0644 "$tmp"
+mv -f "$tmp" "$path"
+if command -v restorecon >/dev/null 2>&1; then restorecon "$path"; fi
+{{end}}result changed 'job configured'
+{{end}}{{end}}
 
 {{define "ntp"}}{{template "prelude"}}command -v timedatectl >/dev/null 2>&1 || { echo "timedatectl is required; use a systemd host" >&2; exit 1; }
 current=$(timedatectl show --property=NTP --value)

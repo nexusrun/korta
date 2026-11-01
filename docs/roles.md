@@ -303,3 +303,27 @@ with active NetworkManager, systemd-resolved or resolvconf; configure those
 services instead. Do not use this step if another service manages the file.
 The plan reports DNS and hostname changes for review. Set appropriate resolver
 addresses for your own environment; the addresses above are examples.
+
+### Scheduled jobs
+
+Use a scheduled job to run a script through the host's cron service. Install and
+start cron separately. The five numeric fields are minute, hour, day of month,
+month and day of week, using the host's timezone. Ranges, lists and steps are
+supported. The default user is `root`. Scheduled scripts require command
+confirmation, just like command steps.
+
+````markdown
+# Scheduled jobs
+- clean-reports
+  - schedule: 0 2 * * 0
+  - user: app
+
+  ```sh
+  /usr/local/bin/clean-reports
+  ```
+````
+
+Korta manages one file per job under `/etc/cron.d`, and leaves other cron files
+alone. To remove a job, use the same role and job name with `state: absent` and
+omit the schedule, user and script. Do not put credentials in scheduled
+scripts, cron files are readable by local users.
