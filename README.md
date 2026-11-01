@@ -164,7 +164,7 @@ so applying twice is safe.
 Without `-i`, Korta reads `inventory.md` in the current folder, or the file
 named by `KORTA_INVENTORY`. `--limit` picks hosts by group, name or label. In
 CI, add `--yes` to apply without a prompt. Groups can use their own SSH user
-and key; see the [CLI guide](docs/cli.md#ssh-keys).
+and key; see the [CLI reference](docs/cli.md#ssh-keys).
 
 ## When something fails
 
@@ -182,8 +182,10 @@ Each apply writes a log with the plan and results to
 
 - [Roles in Markdown](docs/roles.md): everything a role can manage, with
   variables and templates.
-- [CLI guide](docs/cli.md): the inventory format, SSH keys per group,
-  variables, and the commands for Korta Enterprise.
+- [CLI reference](docs/cli.md): the inventory format, SSH keys per group,
+  variables, and host inspection commands.
+- [Credentials](docs/credentials.md): SSH access for the CLI, and how cloud
+  and manager credentials are used.
 - [Releasing](docs/releasing.md): for maintainers.
 
 `korta --help` lists every command, and `korta COMMAND --help` explains one.
