@@ -12,8 +12,8 @@ import (
 
 // commands lists each resource's actions, for routing errors and suggestions.
 var commands = map[string][]string{
-	"disk":        {"inspect"},
-	"network":     {"inspect"},
+	"disk":        {"inspect", "list"},
+	"network":     {"inspect", "list"},
 	"instances":   {"list", "get", "create", "update", "delete", "check", "trust-host-key", "console"},
 	"deployments": {"list", "get", "create", "update", "delete", "apply", "status", "logs", "restart", "rollback", "backup", "backups", "restore", "action", "connection"},
 	"roles":       {"list", "get", "create", "update", "delete", "preview", "plan", "apply", "run", "destroy"},

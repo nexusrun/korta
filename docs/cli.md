@@ -136,13 +136,23 @@ and the AI assistant need a manager.
 
 ## Inspect host networking
 
-Use the standalone CLI to inspect the addresses and routes of an interface on
-selected inventory hosts, without changing them:
+Find the interfaces on selected inventory hosts first. `network list` shows each
+interface's state, MTU, MAC address and addresses. It changes nothing:
+
+```sh
+korta network list -i hosts.md --limit env=staging
+```
+
+Then inspect one interface by name, for its addresses and routes, without changing
+the host:
 
 ```sh
 korta network inspect eth0 -i hosts.md --limit env=staging
 korta network inspect eth0 -i hosts.md --json
 ```
+
+Interface names are Linux names of at most 15 letters, digits, underscores, dots
+or hyphens. `network list` marks any name that `network inspect` would refuse.
 
 The output contains `iproute2` JSON for the interface and its IPv4 and IPv6
 routes. Each host needs the `ip` command. Korta uses the same inventory, SSH
@@ -176,12 +186,21 @@ on the local and remote hosts using appropriate permissions.
 
 ## Inspect a disk
 
-To inspect one explicitly named block device on selected inventory hosts:
+Find the disks on selected inventory hosts first. `disk list` shows each block
+device with its size, serial number or WWN, mount points and the stable
+`/dev/disk/by-id/` names that `disk inspect` accepts. It changes nothing:
+
+```sh
+korta disk list -i hosts.md --limit staging
+```
+
+Then inspect one device by a stable ID from that list:
 
 ```sh
 korta disk inspect /dev/disk/by-id/DEVICE -i hosts.md --limit staging
 ```
 
-The device must have a serial number or WWN. This read-only probe currently
-refuses a device with child devices; it does not partition, format or mount
-storage. Use `--json` for machine-readable output.
+The device must have a serial number or WWN. Devices with partitions are listed
+but not inspected; check their partitions with `disk list` on the host instead.
+This read-only probe does not partition, format or mount storage. Use `--json`
+for machine-readable output.
