@@ -47,6 +47,8 @@ changes what differs from the description.
 | Time            | `timezone America/Phoenix`; `ntp enabled` or `ntp disabled` using `timedatectl` |
 | DNS             | `nameservers 1.1.1.1, 8.8.8.8` for manually managed resolver files |
 | Variables       | `domain = example.com`: defaults for `{{ domain }}` (see below)         |
+| SELinux         | `mode enforcing`; `boolean httpd_can_network_connect on`; `port tcp 8080 http_port_t`; `fcontext /srv/web httpd_sys_content_t recursive` |
+| Scheduled jobs  | `clean-reports` with `schedule: 0 2 * * 0`, `user: app`, and a script in a code block |
 
 A Files bullet can end with `check with COMMAND`. Korta puts the new file in
 place, runs the command, and puts the previous file back if it fails, so a bad
@@ -309,8 +311,8 @@ addresses for your own environment; the addresses above are examples.
 Use a scheduled job to run a script through the host's cron service. Install and
 start cron separately. The five numeric fields are minute, hour, day of month,
 month and day of week, using the host's timezone. Ranges, lists and steps are
-supported. The default user is `root`. Scheduled scripts require command
-confirmation, just like command steps.
+supported. The default user is `root`. Adding or changing a job needs command
+confirmation, just like command steps; removing one does not.
 
 ````markdown
 # Scheduled jobs
@@ -323,10 +325,11 @@ confirmation, just like command steps.
   ```
 ````
 
-Korta manages one file per job under `/etc/cron.d`, and leaves other cron files
-alone. To remove a job, use the same role and job name with `state: absent` and
-omit the schedule, user and script. Do not put credentials in scheduled
-scripts, cron files are readable by local users.
+Korta manages one file per job, `/etc/cron.d/xela-JOB`, and leaves other cron
+files alone. To remove a job, use the same role and job name with `state: absent`
+and omit the schedule, user and script. Scheduled scripts can't use
+`{{ secret.NAME }}`, and cron files are readable by local users, so do not put
+credentials in them.
 
 ### SELinux
 
