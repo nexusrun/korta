@@ -220,7 +220,9 @@ before you write a role.
 | Command | What it does |
 | ------- | ------------ |
 | `korta inventory -i hosts.md` | Lists the hosts that a selector matches, with their keys and variables |
+| `korta disk list -i hosts.md` | Lists block devices and the stable IDs to inspect them with |
 | `korta disk inspect DEVICE -i hosts.md` | Shows a block device by its stable ID |
+| `korta network list -i hosts.md` | Lists interfaces, their state and addresses |
 | `korta network inspect eth0 -i hosts.md` | Shows an interface's addresses and routes |
 | `korta copy SOURCE DEST -i hosts.md` | Copies one file to selected hosts, with `--dry-run` first |
 
