@@ -16,6 +16,8 @@ import (
 	"runtime/debug"
 	"strings"
 	"time"
+
+	"github.com/nexusrun/korta/internal/awsprovider"
 )
 
 // Version is set at build time with -ldflags "-X github.com/nexusrun/korta/cli.Version=v1.2.3".
@@ -27,6 +29,9 @@ type config struct {
 }
 
 type client struct {
+	aws          cloud.EC2
+	awsScan      func(context.Context, string) (string, error)
+	awsConfigure func(context.Context, *localRole, awsReservation, string, string, string) error
 	base         string
 	token        string
 	http         *http.Client

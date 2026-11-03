@@ -176,6 +176,66 @@ korta roles preview --markdown role.md     # with Korta Enterprise
 korta plan role.md -i hosts.md             # offline, read-only on the hosts
 ```
 
+## Create AWS instances from the core CLI
+
+The core CLI can create EC2 instances and configure them using one role. Set up
+AWS credentials through an AWS profile, environment variables, or an IAM role,
+and set a region in the role or the AWS configuration. For example:
+
+```markdown
+# AWS instance
+- name: web
+- count: 2
+- region: us-east-1
+- os: ubuntu 24.04
+- size: t3.small
+
+# Firewall
+- open 443/tcp from anywhere
+
+# Packages
+- nginx
+```
+
+```sh
+korta plan web.md
+korta apply web.md
+```
+
+The plan resolves the account, image, VPC, subnets and access rules and performs
+an EC2 dry run. It creates no cloud resources. Configuration steps cannot be
+inspected until the host is reachable; apply shows a host plan before making
+host changes. New AWS resources may incur charges. Apply prompts before cloud
+changes and again before host changes; `--yes` accepts both prompts. Custom
+scripts and checks also require `--confirm-commands`.
+
+When the role has firewall steps and neither UFW nor firewalld is active,
+Korta enables UFW after allowing the current SSH source and the role's open
+ports. It installs UFW on apt-based hosts if needed, and schedules a rollback
+until it verifies a fresh SSH connection. See [AWS setup](aws.md) for source
+address changes and recovery.
+
+Core uses the default VPC unless the role supplies a subnet. It creates an SSH
+key pair and, unless security groups are supplied, a security group allowing
+SSH from the caller's public IP and the role's firewall ports. Private addresses
+require network access from the CLI machine. The first SSH host key is trusted
+on first use, displayed and pinned; verify the fingerprint independently when
+possible. Later key changes are rejected.
+
+Korta stores a private key, launch reservations and pinned host keys under
+`$XDG_STATE_HOME/korta/aws`, or `~/.local/state/korta/aws` by default. Back up
+this private state securely. Reapply the same role after an interrupted run to
+recover its instances. Count can grow but cannot shrink; changing existing launch
+settings or moving or renaming the role requires a separate migration. Deleting
+the role or local state does not terminate AWS resources. Inspect AWS directly
+to manage or remove them.
+
+This first core version supports EC2 creation and host configuration. Manager
+network presets, custom key pairs, static IPs, load balancers, DNS, standalone
+AWS network roles and JSON apply output are not supported. It runs on Linux and
+macOS. AWS fields remain literal values, and secrets and credentials must not be
+included in the AWS section.
+
 ## Create AWS instances (Enterprise)
 
 With a Korta Enterprise manager, a role can create its own EC2 instances: begin
@@ -227,7 +287,7 @@ and checks launch permission with a dry run. Approval creates the instances,
 waits for SSH and configures them. Running the role again configures them and
 launches more if `count` grew. Destroy is planned and approved like any change,
 then terminates the instances and deletes the security group and key pair.
-Offline `korta plan` and `korta apply` refuse AWS sections.
+Core `korta plan` and `korta apply` also support a standalone EC2 workflow, as described above.
 
 ### Load balancers
 

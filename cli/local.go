@@ -42,8 +42,10 @@ func (c *client) local(ctx context.Context) error {
 			if gcp, _ := roles.ParseGCP(string(b)); gcp != nil {
 				return fmt.Errorf("GCP provisioning requires a Korta Enterprise manager; use korta roles create, plan and apply")
 			}
-			if aws, _ := roles.ProvisionsAWS(string(b)); aws {
-				return fmt.Errorf("AWS provisioning requires a Korta Enterprise manager; use korta roles create, plan and apply")
+			if aws, err := roles.ProvisionsAWS(string(b)); err != nil {
+				return err
+			} else if aws {
+				return c.localAWS(ctx, o.args[1])
 			}
 		}
 	}
@@ -94,6 +96,10 @@ func (c *client) local(ctx context.Context) error {
 }
 
 func (c *client) localApply(ctx context.Context, role *localRole, targets []roles.Target, plan roles.Run) error {
+	return c.localApplyFinalized(ctx, role, targets, plan, nil)
+}
+
+func (c *client) localApplyFinalized(ctx context.Context, role *localRole, targets []roles.Target, plan roles.Run, finalize func(*roles.HostResult) error) error {
 	o := c.opts
 	_, commands := role.review()
 	if c.format() != "json" {
@@ -137,6 +143,12 @@ func (c *client) localApply(ctx context.Context, role *localRole, targets []role
 			continue
 		}
 		for _, h := range roles.RunHosts(ctx, roles.Role{Name: role.name}, group, true, batch) {
+			if h.Status != "failed" && finalize != nil {
+				if err := finalize(&h); err != nil {
+					h.Status = "failed"
+					h.Error = err.Error()
+				}
+			}
 			h = roles.RedactResult(h, role.secretValues())
 			fmt.Fprintf(c.errOut, "  %-8s %s\n", h.Status, h.Instance)
 			run.Add(h)
