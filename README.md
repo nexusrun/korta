@@ -193,7 +193,7 @@ Each apply writes a log with the plan and results to
 ## Korta Enterprise
 
 Korta Enterprise adds a manager with a web console, PostgreSQL, MySQL and
-Node.js deployments, plan approval and an audit log, AWS provisioning, and an
+Node.js deployments, plan approval and an audit log, managed AWS provisioning, and an
 AI role assistant. The same `korta` CLI and role files work with it: sign in
 with `korta login --server URL --token-file FILE`.
 
@@ -227,3 +227,5 @@ follow the [code of conduct](CODE_OF_CONDUCT.md).
 Korta is licensed under the [Apache License, Version 2.0](LICENSE).
 Copyright 2026 The Korta Authors; see [NOTICE](NOTICE). Korta Enterprise is a
 separate, commercial product.
+
+The core CLI can also [create AWS EC2 instances and configure them with a role](docs/roles.md#create-aws-instances-from-the-core-cli).

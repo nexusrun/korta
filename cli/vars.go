@@ -35,7 +35,9 @@ var envRef = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}`)
 var nonName = regexp.MustCompile(`[^a-z0-9]+`)
 
 // loadRole reads the role file and checks what it can before connecting.
-func (c *client) loadRole(path string) (*localRole, error) {
+func (c *client) loadRole(path string) (*localRole, error) { return c.loadRoleMode(path, false) }
+
+func (c *client) loadRoleMode(path string, allowAWS bool) (*localRole, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
@@ -51,7 +53,7 @@ func (c *client) loadRole(path string) (*localRole, error) {
 	if err != nil {
 		return nil, err
 	}
-	if aws {
+	if aws && !allowAWS {
 		return nil, fmt.Errorf("AWS provisioning requires a Korta Enterprise manager; use korta roles create --file ROLE.md --name NAME, then roles plan and roles apply --approve")
 	}
 	name := c.opts.values["name"]
