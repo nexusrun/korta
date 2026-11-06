@@ -3,6 +3,8 @@
 Describe your servers in Markdown, see exactly what will change, and apply it
 over SSH. No agents, no YAML. Hosts need only SSH with root or passwordless sudo.
 
+![Planning, applying and re-running a role that installs nginx](docs/images/korta-demo.gif)
+
 ```markdown
 # Users
 - test added to database group

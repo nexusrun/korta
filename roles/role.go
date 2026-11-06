@@ -43,11 +43,14 @@ type Rollout struct {
 
 // Step is one typed action. Only the fields of its Type are used.
 type Step struct {
-	GCP     *GCPInstance `json:"gcp,omitempty"`
-	AWS     *AWSInstance `json:"aws,omitempty"`
-	Network *AWSNetwork  `json:"network,omitempty"`
-	Type    string       `json:"type"` // packages, patch, group, user, directory, file, service, sysctl, firewall, command
-	Name    string       `json:"name,omitempty"`
+	Azure   *AzureInstance `json:"azure,omitempty"`
+	GCP     *GCPInstance   `json:"gcp,omitempty"`
+	AWS     *AWSInstance   `json:"aws,omitempty"`
+	Network *AWSNetwork    `json:"network,omitempty"`
+
+	AzureNetwork *AzureNetwork `json:"azureNetwork,omitempty"`
+	Type         string        `json:"type"` // packages, patch, group, user, directory, file, service, sysctl, firewall, command
+	Name         string        `json:"name,omitempty"`
 
 	// SELinux
 	SELinuxMode    string `json:"selinuxMode,omitempty"`
@@ -166,6 +169,9 @@ func (r *Role) Compile(vars map[string]string) error {
 		return fmt.Errorf("role name must be lowercase letters, digits and -")
 	}
 	if r.Markdown != "" {
+		if _, err := ParseAzure(r.Markdown); err != nil {
+			return err
+		}
 		if _, err := ParseGCP(r.Markdown); err != nil {
 			return err
 		}
@@ -173,6 +179,9 @@ func (r *Role) Compile(vars map[string]string) error {
 			return err
 		}
 		if _, err := ParseAWSNetwork(r.Markdown); err != nil {
+			return err
+		}
+		if _, err := ParseAzureNetwork(r.Markdown); err != nil {
 			return err
 		}
 		size := len(r.Markdown)
@@ -221,7 +230,10 @@ func (r *Role) Compile(vars map[string]string) error {
 	if r.AWSNetwork() != nil && (len(r.Steps) != 1 || len(r.Targets.InstanceIDs) > 0 || len(r.Targets.Labels) > 0) {
 		return fmt.Errorf("a network role has only its AWS network section and no targets")
 	}
-	if r.AWS() == nil && r.AWSNetwork() == nil && r.GCP() == nil && len(r.Targets.InstanceIDs) == 0 && len(r.Targets.Labels) == 0 {
+	if r.AzureNetwork() != nil && (len(r.Steps) != 1 || len(r.Targets.InstanceIDs) > 0 || len(r.Targets.Labels) > 0) {
+		return fmt.Errorf("a network role has only its Azure network section and no targets")
+	}
+	if r.AWS() == nil && r.AWSNetwork() == nil && r.GCP() == nil && r.Azure() == nil && r.AzureNetwork() == nil && len(r.Targets.InstanceIDs) == 0 && len(r.Targets.Labels) == 0 {
 		return fmt.Errorf("choose target instances or labels")
 	}
 	for k, v := range r.Targets.Labels {
@@ -269,7 +281,7 @@ func (r *Role) Compile(vars map[string]string) error {
 			}
 			seenSystem[r.Steps[i].Type] = true
 		}
-		if (r.Steps[i].Type == "aws-instance" || r.Steps[i].Type == "aws-network" || r.Steps[i].Type == "gcp-instance") && i != 0 {
+		if (r.Steps[i].Type == "aws-instance" || r.Steps[i].Type == "aws-network" || r.Steps[i].Type == "gcp-instance" || r.Steps[i].Type == "azure-instance" || r.Steps[i].Type == "azure-network") && i != 0 {
 			return fmt.Errorf("a cloud provisioning section must be the first step")
 		}
 		if err := r.Steps[i].normalize(); err != nil {
@@ -283,15 +295,25 @@ func (s *Step) normalize() error {
 	if len(s.Name) > 120 {
 		return fmt.Errorf("name must be at most 120 characters")
 	}
-	if s.Type != "gcp-instance" && s.GCP != nil || s.Type != "aws-instance" && s.AWS != nil || s.Type != "aws-network" && s.Network != nil {
+	if s.Type != "azure-instance" && s.Azure != nil || s.Type != "gcp-instance" && s.GCP != nil || s.Type != "aws-instance" && s.AWS != nil || s.Type != "aws-network" && s.Network != nil || s.Type != "azure-network" && s.AzureNetwork != nil {
 		return fmt.Errorf("cloud settings require their own step type")
 	}
 	switch s.Type {
+	case "azure-network":
+		if s.AzureNetwork == nil {
+			return fmt.Errorf("Azure network settings are required")
+		}
+		return s.AzureNetwork.normalize()
 	case "aws-network":
 		if s.Network == nil {
 			return fmt.Errorf("AWS network settings are required")
 		}
 		return s.Network.normalize()
+	case "azure-instance":
+		if s.Azure == nil {
+			return fmt.Errorf("Azure settings are required")
+		}
+		return s.Azure.normalize()
 	case "gcp-instance":
 		if s.GCP == nil {
 			return fmt.Errorf("GCP settings are required")
@@ -544,6 +566,12 @@ func (r Role) Risky() []string {
 			what += fmt.Sprintf(" with %d NAT gateways, billed hourly", g)
 		}
 		out = append(out, what)
+	}
+	if n := r.AzureNetwork(); n != nil {
+		out = append(out, fmt.Sprintf("creates Azure virtual network %s with %d subnets and a network security group that allows SSH", n.Name, len(n.Subnets)))
+	}
+	if r.Azure() != nil {
+		out = append(out, fmt.Sprintf("creates %d billable Azure instances; configuration is checked after launch", r.Azure().Count))
 	}
 	if r.GCP() != nil {
 		out = append(out, fmt.Sprintf("creates %d billable GCP instances; configuration is checked after launch", r.GCP().Count))

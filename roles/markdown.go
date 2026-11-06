@@ -30,6 +30,7 @@ import (
 var sectionKinds = []struct{ kind, prefix string }{
 	{"aws-instance", "aws"},
 	{"gcp-instance", "gcp"},
+	{"azure-instance", "azure"},
 	{"selinux", "selinux"},
 	{"scheduled-job", "scheduled"},
 	{"dns", "dns"}, {"hostname", "hostname"}, {"timezone", "timezone"}, {"time", "time"},
@@ -47,7 +48,7 @@ var sectionKinds = []struct{ kind, prefix string }{
 }
 
 var sectionTitles = map[string]string{
-	"gcp-instance": "GCP instance", "aws-instance": "AWS instance", "aws-network": "AWS network", "aws-lb": "AWS load balancer", "aws-dns": "AWS DNS", "time": "Time", "ntp": "Time", "dns": "DNS", "hostname": "Hostname", "timezone": "Timezone", "group": "Groups", "user": "Users", "directory": "Directories", "packages": "Packages",
+	"azure-instance": "Azure instance", "gcp-instance": "GCP instance", "aws-instance": "AWS instance", "aws-network": "AWS network", "azure-network": "Azure network", "aws-lb": "AWS load balancer", "aws-dns": "AWS DNS", "time": "Time", "ntp": "Time", "dns": "DNS", "hostname": "Hostname", "timezone": "Timezone", "group": "Groups", "user": "Users", "directory": "Directories", "packages": "Packages",
 	"service": "Services", "file": "Files", "sysctl": "Kernel settings", "firewall": "Firewall",
 	"selinux-mode": "SELinux", "selinux-boolean": "SELinux", "selinux-port": "SELinux", "selinux-fcontext": "SELinux", "patch": "Updates", "command": "Commands", "scheduled-job": "Scheduled jobs",
 }
@@ -92,11 +93,21 @@ func ParseMarkdown(src string) ([]Step, error) {
 	if gcp != nil {
 		steps = append(steps, *gcp)
 	}
+	azure, err := parseAzure(items)
+	if err != nil {
+		return nil, err
+	}
+	if azure != nil && gcp != nil {
+		return nil, fmt.Errorf("a role can provision only one cloud")
+	}
+	if azure != nil {
+		steps = append(steps, *azure)
+	}
 	cloud, err := parseAWS(items)
 	if err != nil {
 		return nil, err
 	}
-	if cloud != nil && gcp != nil {
+	if cloud != nil && (gcp != nil || azure != nil) {
 		return nil, fmt.Errorf("a role can provision only one cloud")
 	}
 	if cloud != nil {
@@ -106,15 +117,25 @@ func ParseMarkdown(src string) ([]Step, error) {
 	if err != nil {
 		return nil, err
 	}
-	if network != nil && gcp != nil {
+	if network != nil && (gcp != nil || azure != nil) {
 		return nil, fmt.Errorf("a role can provision only one cloud")
 	}
 	if network != nil {
 		return []Step{*network}, nil
 	}
+	azureNetwork, err := parseAzureNetwork(items)
+	if err != nil {
+		return nil, err
+	}
+	if azureNetwork != nil && (gcp != nil || cloud != nil) {
+		return nil, fmt.Errorf("a role can provision only one cloud")
+	}
+	if azureNetwork != nil {
+		return []Step{*azureNetwork}, nil
+	}
 	sysctl := -1
 	for _, it := range items {
-		if it.kind == "gcp-instance" || it.kind == "aws-instance" || it.kind == "aws-lb" || it.kind == "aws-dns" {
+		if it.kind == "azure-instance" || it.kind == "gcp-instance" || it.kind == "aws-instance" || it.kind == "aws-lb" || it.kind == "aws-dns" {
 			continue
 		}
 		parsed, err := parseItem(it)
@@ -147,7 +168,7 @@ func scanMarkdown(src string) ([]mdItem, error) {
 	lines := strings.Split(strings.ReplaceAll(src, "\r\n", "\n"), "\n")
 	items := []mdItem{}
 	kind, title, titleLine := "", "", 0
-	awsSection, seenSection := false, map[string]bool{}
+	awsSection, azureSection, seenSection := false, false, map[string]bool{}
 	open := -1 // index of the last item in this section that may take a code block
 	for i := 0; i < len(lines); i++ {
 		raw := strings.TrimRight(lines[i], " \t")
@@ -191,15 +212,21 @@ func scanMarkdown(src string) ([]mdItem, error) {
 			continue
 		}
 		if m := headingRe.FindStringSubmatch(trimmed); m != nil && m[2] != "" && !strings.HasPrefix(m[2], "!") {
-			if (kind == "gcp-instance" || kind == "aws-instance" || kind == "aws-network" || kind == "aws-lb") && open < 0 {
+			if (kind == "azure-instance" || kind == "azure-network" || kind == "gcp-instance" || kind == "aws-instance" || kind == "aws-network" || kind == "aws-lb") && open < 0 {
 				return nil, fmt.Errorf("line %d: %s needs field: value bullets", titleLine, sectionTitles[kind])
 			}
 			kind, title, titleLine, open = headingKind(m[2]), m[2], n, -1
-			if kind == "aws-lb" || kind == "aws-dns" {
+			if kind == "azure-instance" || kind == "aws-lb" || kind == "aws-dns" {
 				if seenSection[kind] {
 					return nil, fmt.Errorf("line %d: a role can have only one %s section", n, sectionTitles[kind])
 				}
 				seenSection[kind] = true
+			}
+			if kind == "azure-instance" || kind == "azure-network" {
+				if azureSection {
+					return nil, fmt.Errorf("line %d: a role can have only one Azure section: an instance or a network", n)
+				}
+				azureSection = true
 			}
 			if kind == "aws-instance" || kind == "aws-network" {
 				if awsSection {
@@ -230,7 +257,7 @@ func scanMarkdown(src string) ([]mdItem, error) {
 		items = append(items, mdItem{kind: kind, title: title, line: n, indent: indent, text: text})
 		open = len(items) - 1
 	}
-	if (kind == "gcp-instance" || kind == "aws-instance" || kind == "aws-network" || kind == "aws-lb") && open < 0 {
+	if (kind == "azure-instance" || kind == "azure-network" || kind == "gcp-instance" || kind == "aws-instance" || kind == "aws-network" || kind == "aws-lb") && open < 0 {
 		return nil, fmt.Errorf("line %d: %s needs field: value bullets", titleLine, sectionTitles[kind])
 	}
 	return items, nil
@@ -239,6 +266,10 @@ func scanMarkdown(src string) ([]mdItem, error) {
 func headingKind(heading string) string {
 	best, at := "", -1
 	words := strings.Fields(strings.ToLower(heading))
+	// "Azure network" and "Azure VNet" are networks; other Azure headings instances.
+	if len(words) > 1 && strings.HasPrefix(words[0], "azure") && (strings.HasPrefix(words[1], "network") || strings.HasPrefix(words[1], "vnet") || words[1] == "virtual" && len(words) > 2 && strings.HasPrefix(words[2], "network")) {
+		return "azure-network"
+	}
 	// "AWS network" and "AWS VPC" are networks; other AWS headings instances.
 	if len(words) > 1 && strings.HasPrefix(words[0], "aws") && (strings.HasPrefix(words[1], "network") || words[1] == "vpc") {
 		return "aws-network"
@@ -788,6 +819,18 @@ func ToMarkdown(steps []Step) string {
 		case "aws-network":
 			if s.Network != nil {
 				b.WriteString(s.Network.markdown())
+			}
+		case "azure-network":
+			if s.AzureNetwork != nil {
+				b.WriteString(s.AzureNetwork.markdown())
+			}
+		case "azure-instance":
+			if a := s.Azure; a != nil {
+				for _, f := range [][2]string{{"network", a.Network}, {"network-interface", a.NetworkInterface}, {"image", a.Image}, {"name", a.Name}, {"count", strconv.Itoa(a.Count)}, {"subscription", a.Subscription}, {"resource-group", a.ResourceGroup}, {"location", a.Location}, {"size", a.Size}, {"virtual-network", a.VirtualNetwork}, {"subnet", a.Subnet}, {"user", a.User}, {"address", a.Address}} {
+					if f[1] != "" {
+						fmt.Fprintf(&b, "- %s: %s\n", f[0], f[1])
+					}
+				}
 			}
 		case "gcp-instance":
 			if g := s.GCP; g != nil {

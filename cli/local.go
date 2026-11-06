@@ -39,6 +39,11 @@ func (c *client) local(ctx context.Context) error {
 	// Recognize provisioning before requiring an offline inventory.
 	if len(o.args) == 2 && o.args[0] != "inventory" {
 		if b, err := os.ReadFile(o.args[1]); err == nil {
+			if az, err := roles.ProvisionsAzure(string(b)); err != nil {
+				return err
+			} else if az {
+				return fmt.Errorf("Azure provisioning requires a Korta Enterprise manager; use korta roles create, plan and apply")
+			}
 			if gcp, _ := roles.ParseGCP(string(b)); gcp != nil {
 				return fmt.Errorf("GCP provisioning requires a Korta Enterprise manager; use korta roles create, plan and apply")
 			}
