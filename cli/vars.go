@@ -42,6 +42,13 @@ func (c *client) loadRoleMode(path string, allowAWS bool) (*localRole, error) {
 	if err != nil {
 		return nil, err
 	}
+	az, err := roles.ProvisionsAzure(string(b))
+	if err != nil {
+		return nil, err
+	}
+	if az {
+		return nil, fmt.Errorf("Azure provisioning requires a Korta Enterprise manager; use korta roles create, plan and apply")
+	}
 	gcp, err := roles.ParseGCP(string(b))
 	if err != nil {
 		return nil, err
