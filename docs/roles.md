@@ -37,6 +37,7 @@ changes what differs from the description.
 | Groups          | `apps`, `builders (system)`, `remove legacy`                            |
 | Directories     | `/opt/app owned by app:apps, mode 0750` (default root, 0755)            |
 | Files           | `/etc/motd, mode 0644` with the content in a code block below; `remove /etc/old.conf` |
+| Repositories    | `docker` with `url:`, `key:` and `fingerprint:` bullets; `remove docker` (see below) |
 | Packages        | `nginx, curl`; `keep openssl at the latest version`; `remove telnet`    |
 | Services        | `nginx started, enabled, restart on change`; `postfix stopped, disabled` |
 | Kernel settings | `net.core.somaxconn = 1024`                                             |
@@ -365,6 +366,67 @@ with active NetworkManager, systemd-resolved or resolvconf; configure those
 services instead. Do not use this step if another service manages the file.
 The plan reports DNS and hostname changes for review. Set appropriate resolver
 addresses for your own environment; the addresses above are examples.
+
+### Package repositories
+
+Add a repository to install software your distribution does not ship. Put the
+section above the Packages section that installs from it.
+
+```markdown
+# Repositories
+- docker
+  - url: https://download.docker.com/linux/{{ os.distro }}
+  - key: https://download.docker.com/linux/{{ os.distro }}/gpg
+  - fingerprint: 9DC8 5822 9FC7 DD38 854A E2D8 8D81 803C 0EBF CD88
+  - components: stable
+
+# Packages
+- docker-ce
+```
+
+| Field | Meaning |
+| ----- | ------- |
+| `url` | The repository's `https://` address |
+| `key` | The `https://` address of its signing key, armored or binary |
+| `fingerprint` | The key's full 40-character fingerprint, from the publisher's documentation. Separate several with commas |
+| `suite` | apt only. Default: the host's release codename, such as `noble` |
+| `components` | apt only. Default: `main` |
+
+`fingerprint` is required. Korta downloads the key, and adds the repository
+only if the key file holds exactly the listed keys. A different or additional
+key fails the step and changes nothing. The plan flags every repository for
+review, because its publisher can install software as root.
+
+On dnf hosts, write the full path in `url`. `$releasever` and `$basearch` are
+passed to dnf as they are:
+
+```markdown
+# Repositories
+- docker
+  - url: https://download.docker.com/linux/rhel/$releasever/$basearch/stable
+  - key: https://download.docker.com/linux/rhel/gpg
+  - fingerprint: 060A 61C5 1B55 8A7F 742B 77AA C52F EB6B 621E 9F35
+```
+
+apt and dnf addresses differ, so keep apt and dnf hosts in separate roles, or
+set the address per group with a variable. `suite`, `components`, and dnf
+variables on the wrong kind of host are errors, not ignored.
+
+Korta manages two files per repository and leaves others alone:
+`/etc/apt/sources.list.d/xela-NAME.sources` with
+`/etc/apt/keyrings/xela-NAME.gpg`, or `/etc/yum.repos.d/xela-NAME.repo` with
+`/etc/pki/rpm-gpg/RPM-GPG-KEY-xela-NAME`. The key is trusted for this
+repository only. After writing them, Korta reads the repository once. If that
+fails, it puts the previous files back and reports the package manager's
+error.
+
+- Applying needs `gpg` and `curl` or `wget` on the host. Minimal Debian and
+  Ubuntu images lack them: list `gnupg, curl` under a Packages heading above
+  the repository.
+- `remove docker` deletes both files. Installed packages stay, and on dnf
+  hosts a key that dnf already imported stays in the rpm database.
+- Addresses with a user name, password or token are not supported, and neither
+  are plain `http://` mirrors.
 
 ### Scheduled jobs
 

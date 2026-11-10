@@ -217,6 +217,8 @@ func StepName(s Step) string {
 		return "SELinux " + strings.TrimPrefix(s.Type, "selinux-")
 	case "scheduled-job":
 		return "scheduled job " + s.Job
+	case "repository":
+		return "repository " + s.Repository
 	case "ntp":
 		return "network time synchronization"
 	case "dns":
