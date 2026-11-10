@@ -31,6 +31,7 @@ Each module below lists the heading that selects it and a minimal example. The
 | Groups | `Groups` | Groups | [Markdown roles](roles.md) |
 | Directories | `Directories`, `Folder` | Directories, owner, group, mode | [Markdown roles](roles.md) |
 | Files | `Files` | File content, templates, owner, mode, checks | [Markdown roles](roles.md) |
+| Repositories | `Repositories`, `Package repositories` | Third-party package repositories and their signing keys | [Markdown roles](roles.md#package-repositories) |
 | Packages | `Packages`, `Software` | Install, remove or upgrade packages | [Markdown roles](roles.md) |
 | Services | `Services` | Start, stop, enable, reload and restart | [Markdown roles](roles.md) |
 | Kernel settings | `Kernel settings`, `Sysctl` | `sysctl` values | [Markdown roles](roles.md) |
@@ -82,6 +83,25 @@ a template, and can run a check before they go live.
 A file with `check with` is put in place, the check runs, and the previous
 file is restored if the check fails. With `%s` in the command, the new content
 is checked before it replaces the old file.
+
+## Package repositories
+
+```markdown
+# Repositories
+- docker
+  - url: https://download.docker.com/linux/{{ os.distro }}
+  - key: https://download.docker.com/linux/{{ os.distro }}/gpg
+  - fingerprint: 9DC8 5822 9FC7 DD38 854A E2D8 8D81 803C 0EBF CD88
+  - components: stable
+
+# Packages
+- docker-ce
+```
+
+Use a repository to install software your distribution does not ship, instead
+of a `curl | sh` command. Korta accepts the signing key only when its
+fingerprint is the one in the role, so the plan shows exactly whom you trust.
+See [Package repositories](roles.md#package-repositories).
 
 ## Packages and services
 

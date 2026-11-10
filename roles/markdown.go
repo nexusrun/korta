@@ -33,6 +33,7 @@ var sectionKinds = []struct{ kind, prefix string }{
 	{"azure-instance", "azure"},
 	{"selinux", "selinux"},
 	{"scheduled-job", "scheduled"},
+	{"repository", "repositor"},
 	{"dns", "dns"}, {"hostname", "hostname"}, {"timezone", "timezone"}, {"time", "time"},
 	{"group", "group"},
 	{"user", "user"}, {"user", "account"},
@@ -50,10 +51,10 @@ var sectionKinds = []struct{ kind, prefix string }{
 var sectionTitles = map[string]string{
 	"azure-instance": "Azure instance", "gcp-instance": "GCP instance", "aws-instance": "AWS instance", "aws-network": "AWS network", "azure-network": "Azure network", "aws-lb": "AWS load balancer", "aws-dns": "AWS DNS", "time": "Time", "ntp": "Time", "dns": "DNS", "hostname": "Hostname", "timezone": "Timezone", "group": "Groups", "user": "Users", "directory": "Directories", "packages": "Packages",
 	"service": "Services", "file": "Files", "sysctl": "Kernel settings", "firewall": "Firewall",
-	"selinux-mode": "SELinux", "selinux-boolean": "SELinux", "selinux-port": "SELinux", "selinux-fcontext": "SELinux", "patch": "Updates", "command": "Commands", "scheduled-job": "Scheduled jobs",
+	"selinux-mode": "SELinux", "selinux-boolean": "SELinux", "selinux-port": "SELinux", "selinux-fcontext": "SELinux", "patch": "Updates", "command": "Commands", "scheduled-job": "Scheduled jobs", "repository": "Repositories",
 }
 
-const sectionHelp = "start its heading with SELinux, Hostname, Time, DNS, Variables, Users, Groups, Directories, Files, Packages, Services, Kernel settings, Firewall, Updates or Commands"
+const sectionHelp = "start its heading with SELinux, Hostname, Time, DNS, Variables, Users, Groups, Directories, Files, Repositories, Packages, Services, Kernel settings, Firewall, Updates or Commands"
 
 var (
 	headingRe = regexp.MustCompile(`^(#{1,6})\s*(.*?)\s*#*$`)
@@ -280,6 +281,12 @@ func headingKind(heading string) string {
 	if len(words) > 1 && strings.HasPrefix(words[0], "aws") && (words[1] == "dns" || strings.HasPrefix(words[1], "domain") || words[1] == "route53") {
 		return "aws-dns"
 	}
+	// "Package repositories" adds repositories; it does not install packages.
+	for i := 0; i+1 < len(words); i++ {
+		if (strings.HasPrefix(words[i], "package") || strings.HasPrefix(words[i], "software")) && strings.HasPrefix(words[i+1], "repositor") {
+			return "repository"
+		}
+	}
 	for i, w := range words {
 		w = strings.Trim(w, "`*_:,.()")
 		for _, k := range sectionKinds {
@@ -365,6 +372,8 @@ func parseItem(it mdItem) ([]Step, error) {
 		steps, err = parsePatch(it)
 	case "scheduled-job":
 		steps, err = parseScheduledJob(it)
+	case "repository":
+		steps, err = parseRepository(it)
 	case "command":
 		steps, err = parseCommand(it)
 	}
@@ -973,6 +982,8 @@ func ToMarkdown(steps []Step) string {
 				fmt.Fprintf(&b, "  - schedule: %s\n  - user: %s\n", s.Schedule, s.User)
 				writeFence(&b, s.Run, "sh")
 			}
+		case "repository":
+			b.WriteString(s.repositoryMarkdown())
 		case "command":
 			b.WriteString("- Run script")
 			if s.Creates != "" {
