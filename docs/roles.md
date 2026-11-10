@@ -38,6 +38,7 @@ changes what differs from the description.
 | Directories     | `/opt/app owned by app:apps, mode 0750` (default root, 0755)            |
 | Files           | `/etc/motd, mode 0644` with the content in a code block below; `remove /etc/old.conf` |
 | Repositories    | `docker` with `url:`, `key:` and `fingerprint:` bullets; `remove docker` (see below) |
+| Downloads       | `/usr/local/bin/tool from https://...` with a `sha256:` bullet; `remove /usr/local/bin/tool` (see below) |
 | Packages        | `nginx, curl`; `keep openssl at the latest version`; `remove telnet`    |
 | Services        | `nginx started, enabled, restart on change`; `postfix stopped, disabled` |
 | Kernel settings | `net.core.somaxconn = 1024`                                             |
@@ -427,6 +428,45 @@ error.
   hosts a key that dnf already imported stays in the rpm database.
 - Addresses with a user name, password or token are not supported, and neither
   are plain `http://` mirrors.
+
+### Downloads
+
+Install a file that is not packaged, such as a release binary:
+
+```markdown
+# Downloads
+- /usr/local/bin/node_exporter from https://github.com/prometheus/node_exporter/releases/download/v1.8.2/node_exporter-1.8.2.linux-{{ os.arch }}.tar.gz
+  - sha256 amd64: 6809dd0b3ec45fd6e992c19071d6b5253aed3ead7bf0686885a51d85c6643c66
+  - sha256 arm64: 627382b9723c642411c33f48861134ebe893e70a63bcc8b3fc0619cd0bfac4be
+  - extract: node_exporter-1.8.2.linux-{{ os.arch }}/node_exporter
+  - mode: 0755
+- /opt/app/app.jar from https://example.com/releases/app-2.4.jar
+  - sha256: 3a7bd3e2360a3d29eea436fcfb7e44c735d117c42d1c1835420b6b9942dd4f1b
+  - owner: app:apps
+```
+
+| Field | Meaning |
+| ----- | ------- |
+| `sha256` | The SHA-256 of the downloaded file, from the publisher's checksum list. Use `sha256 amd64` and `sha256 arm64` when the file differs by architecture |
+| `extract` | Install this one file from a `.tar`, `.tar.gz`, `.tgz`, `.tar.xz`, `.tar.bz2`, `.tar.zst` or `.zip` download. Without it, the downloaded file itself is installed |
+| `owner`, `group` | Default: `root`. `owner: app:apps` sets both |
+| `mode` | Default: `0644`. Use `0755` for programs |
+
+`sha256` is required and is always the checksum of what is downloaded, the
+archive when `extract` is used. On a mismatch the step fails and the existing
+file stays. To upgrade, change the address and the checksum together.
+
+A plan never downloads. It compares the file on the host with the checksum,
+so a file changed by hand is reported and replaced on the next apply. For an
+extracted file, Korta keeps a small record under `/var/lib/xela/downloads`.
+The plan flags every download for review.
+
+- The host needs `curl` or `wget`, plus `tar` or `unzip` for `extract`. List
+  missing ones under a Packages heading above the downloads.
+- The address must be `https://`, without a user name, password or query.
+- Korta installs the file and nothing else: add a Services section to restart
+  what uses it, with `restart on change`.
+- `remove /usr/local/bin/tool` deletes the file and its record.
 
 ### Scheduled jobs
 

@@ -57,6 +57,10 @@ func Script(role string, s Step, h Host, apply, changedBefore bool) (string, err
 		if err := checkRepositoryHost(s, h); err != nil {
 			return "", err
 		}
+	case "download":
+		if err := downloadData(s, h, data); err != nil {
+			return "", err
+		}
 	case "selinux-fcontext":
 		data["Spec"] = selinuxFileSpec(s)
 	case "user":

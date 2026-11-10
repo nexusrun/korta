@@ -34,6 +34,7 @@ var sectionKinds = []struct{ kind, prefix string }{
 	{"selinux", "selinux"},
 	{"scheduled-job", "scheduled"},
 	{"repository", "repositor"},
+	{"download", "download"},
 	{"dns", "dns"}, {"hostname", "hostname"}, {"timezone", "timezone"}, {"time", "time"},
 	{"group", "group"},
 	{"user", "user"}, {"user", "account"},
@@ -51,10 +52,10 @@ var sectionKinds = []struct{ kind, prefix string }{
 var sectionTitles = map[string]string{
 	"azure-instance": "Azure instance", "gcp-instance": "GCP instance", "aws-instance": "AWS instance", "aws-network": "AWS network", "azure-network": "Azure network", "aws-lb": "AWS load balancer", "aws-dns": "AWS DNS", "time": "Time", "ntp": "Time", "dns": "DNS", "hostname": "Hostname", "timezone": "Timezone", "group": "Groups", "user": "Users", "directory": "Directories", "packages": "Packages",
 	"service": "Services", "file": "Files", "sysctl": "Kernel settings", "firewall": "Firewall",
-	"selinux-mode": "SELinux", "selinux-boolean": "SELinux", "selinux-port": "SELinux", "selinux-fcontext": "SELinux", "patch": "Updates", "command": "Commands", "scheduled-job": "Scheduled jobs", "repository": "Repositories",
+	"selinux-mode": "SELinux", "selinux-boolean": "SELinux", "selinux-port": "SELinux", "selinux-fcontext": "SELinux", "patch": "Updates", "command": "Commands", "scheduled-job": "Scheduled jobs", "repository": "Repositories", "download": "Downloads",
 }
 
-const sectionHelp = "start its heading with SELinux, Hostname, Time, DNS, Variables, Users, Groups, Directories, Files, Repositories, Packages, Services, Kernel settings, Firewall, Updates or Commands"
+const sectionHelp = "start its heading with SELinux, Hostname, Time, DNS, Variables, Users, Groups, Directories, Files, Repositories, Downloads, Packages, Services, Kernel settings, Firewall, Updates or Commands"
 
 var (
 	headingRe = regexp.MustCompile(`^(#{1,6})\s*(.*?)\s*#*$`)
@@ -374,6 +375,8 @@ func parseItem(it mdItem) ([]Step, error) {
 		steps, err = parseScheduledJob(it)
 	case "repository":
 		steps, err = parseRepository(it)
+	case "download":
+		steps, err = parseDownload(it)
 	case "command":
 		steps, err = parseCommand(it)
 	}
@@ -984,6 +987,8 @@ func ToMarkdown(steps []Step) string {
 			}
 		case "repository":
 			b.WriteString(s.repositoryMarkdown())
+		case "download":
+			b.WriteString(s.downloadMarkdown())
 		case "command":
 			b.WriteString("- Run script")
 			if s.Creates != "" {

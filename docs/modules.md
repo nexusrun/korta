@@ -32,6 +32,7 @@ Each module below lists the heading that selects it and a minimal example. The
 | Directories | `Directories`, `Folder` | Directories, owner, group, mode | [Markdown roles](roles.md) |
 | Files | `Files` | File content, templates, owner, mode, checks | [Markdown roles](roles.md) |
 | Repositories | `Repositories`, `Package repositories` | Third-party package repositories and their signing keys | [Markdown roles](roles.md#package-repositories) |
+| Downloads | `Downloads` | One file, or one file from an archive, pinned to a SHA-256 checksum | [Markdown roles](roles.md#downloads) |
 | Packages | `Packages`, `Software` | Install, remove or upgrade packages | [Markdown roles](roles.md) |
 | Services | `Services` | Start, stop, enable, reload and restart | [Markdown roles](roles.md) |
 | Kernel settings | `Kernel settings`, `Sysctl` | `sysctl` values | [Markdown roles](roles.md) |
@@ -102,6 +103,21 @@ Use a repository to install software your distribution does not ship, instead
 of a `curl | sh` command. Korta accepts the signing key only when its
 fingerprint is the one in the role, so the plan shows exactly whom you trust.
 See [Package repositories](roles.md#package-repositories).
+
+## Downloads
+
+```markdown
+# Downloads
+- /usr/local/bin/node_exporter from https://github.com/prometheus/node_exporter/releases/download/v1.8.2/node_exporter-1.8.2.linux-{{ os.arch }}.tar.gz
+  - sha256 amd64: 6809dd0b3ec45fd6e992c19071d6b5253aed3ead7bf0686885a51d85c6643c66
+  - sha256 arm64: 627382b9723c642411c33f48861134ebe893e70a63bcc8b3fc0619cd0bfac4be
+  - extract: node_exporter-1.8.2.linux-{{ os.arch }}/node_exporter
+  - mode: 0755
+```
+
+Use a download for a release binary or other file that is not packaged. Korta
+installs it only when the checksum matches the role. See
+[Downloads](roles.md#downloads).
 
 ## Packages and services
 

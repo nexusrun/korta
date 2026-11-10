@@ -49,7 +49,7 @@ type Step struct {
 	Network *AWSNetwork    `json:"network,omitempty"`
 
 	AzureNetwork *AzureNetwork `json:"azureNetwork,omitempty"`
-	Type         string        `json:"type"` // repository, packages, patch, group, user, directory, file, service, sysctl, firewall, command
+	Type         string        `json:"type"` // repository, download, packages, patch, group, user, directory, file, service, sysctl, firewall, command
 	Name         string        `json:"name,omitempty"`
 
 	// SELinux
@@ -69,6 +69,11 @@ type Step struct {
 	Fingerprints []string `json:"fingerprints,omitempty"`
 	Suite        string   `json:"suite,omitempty"`      // apt; the host's codename by default
 	Components   []string `json:"components,omitempty"` // apt; main by default
+
+	// download: Path, Owner, Group, Mode and URL, with the SHA-256 of the
+	// downloaded file by architecture (amd64, arm64 or any)
+	Checksums map[string]string `json:"sha256,omitempty"`
+	Extract   string            `json:"extract,omitempty"` // one archive member to install
 
 	// hostname and timezone
 	Hostname    string   `json:"hostname,omitempty"`
@@ -258,6 +263,7 @@ func (r *Role) Compile(vars map[string]string) error {
 	seenSystem := map[string]bool{}
 	seenJobs := map[string]bool{}
 	seenRepositories := map[string]bool{}
+	seenDownloads := map[string]bool{}
 	seenSELinux := map[string]bool{}
 	for i := range r.Steps {
 		s := r.Steps[i]
@@ -289,6 +295,12 @@ func (r *Role) Compile(vars map[string]string) error {
 				return fmt.Errorf("duplicate repository %q", r.Steps[i].Repository)
 			}
 			seenRepositories[r.Steps[i].Repository] = true
+		}
+		if r.Steps[i].Type == "download" {
+			if seenDownloads[r.Steps[i].Path] {
+				return fmt.Errorf("duplicate download %q", r.Steps[i].Path)
+			}
+			seenDownloads[r.Steps[i].Path] = true
 		}
 		if r.Steps[i].Type == "hostname" || r.Steps[i].Type == "timezone" || r.Steps[i].Type == "dns" || r.Steps[i].Type == "ntp" {
 			if seenSystem[r.Steps[i].Type] {
@@ -556,6 +568,8 @@ func (s *Step) normalize() error {
 		}
 	case "repository":
 		return s.normalizeRepository()
+	case "download":
+		return s.normalizeDownload()
 	case "command":
 		if strings.TrimSpace(s.Run) == "" || len(s.Run) > maxCommandSize {
 			return fmt.Errorf("needs a script of at most %d bytes", maxCommandSize)
@@ -566,7 +580,7 @@ func (s *Step) normalize() error {
 			}
 		}
 	default:
-		return fmt.Errorf("unknown step type; use hostname, timezone, ntp, dns, repository, packages, patch, group, user, directory, file, service, sysctl, firewall or command")
+		return fmt.Errorf("unknown step type; use hostname, timezone, ntp, dns, repository, download, packages, patch, group, user, directory, file, service, sysctl, firewall or command")
 	}
 	return nil
 }
@@ -618,6 +632,8 @@ func (r Role) Risky() []string {
 			out = append(out, fmt.Sprintf("step %d schedules a custom script as %s", i+1, s.User))
 		case s.Type == "repository" && s.State == "present":
 			out = append(out, fmt.Sprintf("step %d trusts the package repository %s", i+1, s.URL))
+		case s.Type == "download" && s.State == "present":
+			out = append(out, fmt.Sprintf("step %d installs %s from %s", i+1, s.Path, s.URL))
 		case s.Type == "command":
 			out = append(out, fmt.Sprintf("step %d runs a custom script as root", i+1))
 		case s.Check != "":
