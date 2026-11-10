@@ -219,6 +219,8 @@ func StepName(s Step) string {
 		return "scheduled job " + s.Job
 	case "repository":
 		return "repository " + s.Repository
+	case "download":
+		return "download " + s.Path
 	case "ntp":
 		return "network time synchronization"
 	case "dns":
